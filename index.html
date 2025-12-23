@@ -609,10 +609,10 @@ async function callApi(action, args){
 /* ============================
    カレンダー描画（6週固定）
 ============================ */
-const GRAY_OUT_RANGE = {
-  start: "2025-12-01",
-  end: "2025-12-20",
-};
+const GRAY_OUT_RANGES = [
+  { start: "2025-09-01", end: "2025-12-01" },
+  { start: "2025-12-01", end: "2025-12-20" },
+];
 const MIN_MONTH_OFFSET = -3;
 const MAX_MONTH_OFFSET = 3;
 
@@ -621,14 +621,25 @@ function ymdToDate(dateStr){
   if(!yy || !mm || !dd) return null;
   return new Date(Date.UTC(yy, mm - 1, dd));
 }
-const grayStartDate = ymdToDate(GRAY_OUT_RANGE.start);
-const grayEndDate = ymdToDate(GRAY_OUT_RANGE.end);
+function buildGrayRanges(ranges){
+  return (ranges || [])
+    .map(({ start, end }) => {
+      const s = ymdToDate(start);
+      const e = ymdToDate(end);
+      if(!s || !e) return null;
+      return { start: s, end: e };
+    })
+    .filter(Boolean);
+}
+const grayDateRanges = buildGrayRanges(GRAY_OUT_RANGES);
 
 function isWithinGrayRange(dateStr){
-  if(!grayStartDate || !grayEndDate) return false;
+  if(!grayDateRanges.length) return false;
   const d = ymdToDate(dateStr);
   if(!d) return false;
-  return d.getTime() >= grayStartDate.getTime() && d.getTime() <= grayEndDate.getTime();
+  return grayDateRanges.some(({ start, end }) => {
+    return d.getTime() >= start.getTime() && d.getTime() <= end.getTime();
+  });
 }
 
 function addMonths(monthKey, offset){
@@ -681,10 +692,10 @@ function renderCalendar(monthKey, doneDates, todayYmd){
       cell.className = "day";
       cell.textContent = String(dayNum);
 
-      if(isWithinGrayRange(dateStr)){
-        cell.classList.add("nodata");
-      }else if(doneSet.has(dateStr)){
+      if(doneSet.has(dateStr)){
         cell.classList.add("done");
+      }else if(isWithinGrayRange(dateStr)){
+        cell.classList.add("nodata");
       }
       if(dateStr === todayYmd) cell.classList.add("today");
     }
