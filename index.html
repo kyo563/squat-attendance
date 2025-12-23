@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>スクワット出席</title>
-  <meta name="description" content="スクワット継続Record（モックUI準拠）" />
+  <meta name="description" content="スクワット継続Record（GitHub Pages + GAS(JSONP)）" />
   <style>
     :root{
       --bg:#ffffff;
@@ -383,7 +383,6 @@
         <div class="msg" id="msg">準備中です</div>
 
         <div class="row" style="gap:10px;">
-          <!-- ★ここにスプレッドシートURLを表示 -->
           <a class="linkA" id="sheetLink" href="#" target="_blank" rel="noopener">シートを開く</a>
           <button class="linkBtn" id="btnLogout" type="button">ログアウト</button>
         </div>
@@ -393,24 +392,19 @@
 
 <script>
 /* ============================
-   スプレッドシートURL（埋め込み）
+   設定
 ============================ */
-const SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1SxDeRMLWW3BXAYjaV8X8AJGX9xnnHg8vHxvAdOEKSGM/edit?gid=907152310#gid=907152310";
 
-/* ============================
-   実行モード判定
-   - GASのHTMLService上: google.script.run が使えます
-   - GitHub Pages等: mockで動かします
-============================ */
-const IS_GAS = (typeof google !== "undefined" && google.script && google.script.run);
+// スプレッドシートURL（画面のリンク用。記帳には使いません）
+const SPREADSHEET_URL =
+  "https://docs.google.com/spreadsheets/d/1SxDeRMLWW3BXAYjaV8X8AJGX9xnnHg8vHxvAdOEKSGM/edit?gid=907152310#gid=907152310";
 
-document.getElementById("modeHint").textContent = IS_GAS
-  ? "GASモードです（google.script.run使用）"
-  : "モックモードです（GitHub Pages等で動作）";
+// GAS WebアプリURL（API本体）
+const GAS_API_URL =
+  "https://script.google.com/macros/s/AKfycbwx6D8jpFnDfsmBPRVRVLcVAXOR0fIVJNx6K_ywTVULAwNGn6SjvI29DeOSqs3gmda2bw/exec";
 
-/* シートリンク反映 */
-const sheetLink = document.getElementById("sheetLink");
-sheetLink.href = SPREADSHEET_URL;
+// 共有キーを使う場合（Code.gs の API_SHARED_KEY を設定した場合だけ）
+// const API_SHARED_KEY = "ここに同じキー";
 
 /* ============================
    DOM
@@ -444,12 +438,18 @@ const el = {
 
   msg: document.getElementById("msg"),
   btnLogout: document.getElementById("btnLogout"),
+  modeHint: document.getElementById("modeHint"),
+  sheetLink: document.getElementById("sheetLink"),
 };
+
+el.modeHint.textContent = "GitHub Pages運用（GAS Web API(JSONP)経由）です";
+el.sheetLink.href = SPREADSHEET_URL;
 
 /* ============================
    ストレージ
 ============================ */
 const STORAGE_KEY = "squat_app_token";
+
 function loadToken(){
   try { return localStorage.getItem(STORAGE_KEY) || ""; } catch(e){ return ""; }
 }
@@ -458,117 +458,6 @@ function saveToken(t){
 }
 function clearToken(){
   try { localStorage.removeItem(STORAGE_KEY); } catch(e){}
-}
-
-/* ============================
-   モック実装（GitHub Pages用）
-   ※GASに載せるときは使われません
-============================ */
-const mock = (() => {
-  const USERS = [
-    { userId:"u1", name:"ユーザー１", pin:"1234" },
-    { userId:"u2", name:"ちな雲丹", pin:"7777", isModel:true },
-  ];
-  const DONE = {
-    u1: new Set(["2025-12-01","2025-12-02","2025-12-04","2025-12-05","2025-12-19"]),
-    u2: new Set(["2025-12-01","2025-12-03","2025-12-04","2025-12-06"]),
-  };
-  const TODAY = tzTodayYMD();
-  const monthKey = TODAY.slice(0,7);
-
-  function tzTodayYMD(){
-    const parts = new Intl.DateTimeFormat("ja-JP", {
-      timeZone: "Asia/Tokyo",
-      year: "numeric", month: "2-digit", day: "2-digit"
-    }).formatToParts(new Date());
-    const y = parts.find(p=>p.type==="year").value;
-    const m = parts.find(p=>p.type==="month").value;
-    const d = parts.find(p=>p.type==="day").value;
-    return `${y}-${m}-${d}`;
-  }
-
-  const sessions = new Map(); // token -> userId
-
-  function registerUser(name, pin4){
-    if(!/^\d{4}$/.test(pin4)) return { ok:false, code:"PIN_FMT", message:"PINは4桁です" };
-    if(USERS.some(u => u.pin === pin4)) return { ok:false, code:"PIN_DUP", message:"そのPINは既に使用されています" };
-    const userId = "u" + (USERS.length + 1);
-    USERS.push({ userId, name, pin: pin4 });
-    DONE[userId] = new Set();
-    return { ok:true, userId, name };
-  }
-
-  function login(pin4){
-    const u = USERS.find(x => x.pin === pin4);
-    if(!u) return { ok:false, code:"NOT_FOUND", message:"PINが見つかりません" };
-    const token = "mock-" + Math.random().toString(16).slice(2);
-    sessions.set(token, u.userId);
-    return { ok:true, token, userId:u.userId, name:u.name };
-  }
-
-  function checkin(token, reps){
-    const uid = sessions.get(token);
-    if(!uid) throw new Error("セッション切れです");
-    DONE[uid].add(TODAY);
-    return { ok:true, date:TODAY, name: USERS.find(u=>u.userId===uid).name, timestamp:"22:41" };
-  }
-
-  function getDashboard(token){
-    const uid = sessions.get(token);
-    if(!uid) throw new Error("セッション切れです");
-    const me = USERS.find(u=>u.userId===uid);
-    const myDates = Array.from(DONE[uid]).filter(d => d.startsWith(monthKey)).sort();
-    const todayDone = DONE[uid].has(TODAY);
-    const model = USERS.find(u=>u.isModel) || null;
-    const modelDone = model ? DONE[model.userId].has(TODAY) : false;
-
-    const retention = { active7dRate:0.58, monthAvgRate:0.42 };
-
-    return {
-      ok:true,
-      today:TODAY,
-      monthKey,
-      me:{
-        userId:uid,
-        name:me.name,
-        today:{ done:todayDone, timestamp: todayDone ? "22:41" : "" },
-        monthDoneDates: myDates,
-        monthCount: myDates.length,
-        streak: 3
-      },
-      model:{
-        userId: model ? model.userId : "",
-        today:{ done:modelDone, timestamp: modelDone ? "07:12" : "" }
-      },
-      retention
-    };
-  }
-
-  return { registerUser, login, checkin, getDashboard };
-})();
-
-/* ============================
-   GAS呼び出しラッパー（Promise）
-============================ */
-function callApi(name, ...args){
-  if(!IS_GAS){
-    return Promise.resolve(mock[name](...args));
-  }
-
-  return new Promise((resolve, reject) => {
-    const runner = google.script.run
-      .withSuccessHandler(resolve)
-      .withFailureHandler(err => {
-        const msg = (err && err.message) ? err.message : String(err);
-        reject(new Error(msg));
-      });
-
-    if(typeof runner[name] !== "function"){
-      reject(new Error(`API ${name} が見つかりません`));
-      return;
-    }
-    runner[name](...args);
-  });
 }
 
 /* ============================
@@ -590,10 +479,86 @@ function setMsg(text){
 }
 
 /* ============================
+   JSONP（CORS回避）
+============================ */
+function jsonp_(params){
+  return new Promise((resolve, reject) => {
+    if(!GAS_API_URL) return reject(new Error("GAS_API_URL が未設定です"));
+
+    const cbName = "__cb_" + Date.now() + "_" + Math.random().toString(16).slice(2);
+    const qs = new URLSearchParams(params);
+
+    // 共有キーを使うならここで付与
+    // if (typeof API_SHARED_KEY !== "undefined" && API_SHARED_KEY) qs.set("k", API_SHARED_KEY);
+
+    // キャッシュ回避
+    qs.set("_", String(Date.now()));
+    qs.set("callback", cbName);
+
+    const url = GAS_API_URL + (GAS_API_URL.includes("?") ? "&" : "?") + qs.toString();
+    const script = document.createElement("script");
+    script.src = url;
+    script.async = true;
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("APIタイムアウトです"));
+    }, 15000);
+
+    function cleanup(){
+      clearTimeout(timeout);
+      if (script && script.parentNode) script.parentNode.removeChild(script);
+      try { delete window[cbName]; } catch(e) { window[cbName] = undefined; }
+    }
+
+    window[cbName] = (data) => {
+      cleanup();
+      resolve(data);
+    };
+
+    script.onerror = () => {
+      cleanup();
+      reject(new Error("API呼び出しに失敗しました（script load error）"));
+    };
+
+    document.head.appendChild(script);
+  });
+}
+
+async function callApi(action, args){
+  const p = { action };
+
+  if (action === "login") {
+    p.pin4 = String(args.pin4 || "");
+  } else if (action === "registerUser") {
+    p.displayName = String(args.displayName || "");
+    p.pin4 = String(args.pin4 || "");
+  } else if (action === "getDashboard") {
+    p.token = String(args.token || "");
+  } else if (action === "checkin") {
+    p.token = String(args.token || "");
+    p.reps = String(args.reps != null ? args.reps : 20);
+  } else {
+    throw new Error("Unknown API: " + action);
+  }
+
+  const res = await jsonp_(p);
+
+  // GAS側の例外は { ok:false, error:"..." } で返ってきます
+  if (res && res.ok === false) {
+    throw new Error(res.error || res.message || "API error");
+  }
+  return res;
+}
+
+/* ============================
    カレンダー描画（6週固定）
 ============================ */
 function renderCalendar(monthKey, doneDates, todayYmd){
-  const [y, m] = monthKey.split("-").map(Number);
+  const ym = String(monthKey || "1970-01").split("-");
+  const y = Number(ym[0]);
+  const m = Number(ym[1]);
+
   el.calendar.innerHTML = "";
 
   const dows = ["日","月","火","水","木","金","土"];
@@ -604,13 +569,14 @@ function renderCalendar(monthKey, doneDates, todayYmd){
     el.calendar.appendChild(e);
   }
 
+  // UTCで計算してズレを減らします
   const first = new Date(Date.UTC(y, m-1, 1));
   const last  = new Date(Date.UTC(y, m, 0));
   const startDow = first.getUTCDay();
   const totalDays = last.getUTCDate();
   const cells = 42;
 
-  const doneSet = new Set(doneDates);
+  const doneSet = new Set(doneDates || []);
 
   for(let i=0;i<cells;i++){
     const dayNum = i - startDow + 1;
@@ -640,7 +606,7 @@ function applyDashboard(d){
   opt.textContent = d.me.name;
   el.userSelect.appendChild(opt);
 
-  if(d.me.today.done){
+  if(d.me.today && d.me.today.done){
     el.statusPill.textContent = `状態：今日 記帳済み（${d.me.today.timestamp || "時刻未設定"}）`;
   }else{
     el.statusPill.textContent = "状態：今日は未記帳です";
@@ -648,16 +614,21 @@ function applyDashboard(d){
 
   el.monthLabel.textContent = `${d.monthKey}（Asia/Tokyo）`;
 
-  el.kpiMonthCount.textContent = `自分：${d.me.monthCount ?? d.me.monthDoneDates.length}回`;
-  el.kpiStreak.textContent = `連続：${d.me.streak ?? "--"}日`;
-  el.kpiToday.textContent = `今日：${d.me.today.done ? "達成" : "未達"}`;
+  const monthCount = (d.me && typeof d.me.monthCount === "number")
+    ? d.me.monthCount
+    : (d.me.monthDoneDates ? d.me.monthDoneDates.length : 0);
 
-  renderCalendar(d.monthKey, d.me.monthDoneDates || [], d.today);
+  el.kpiMonthCount.textContent = `自分：${monthCount}回`;
+  el.kpiStreak.textContent = `連続：${(d.me && d.me.streak != null) ? d.me.streak : "--"}日`;
+  el.kpiToday.textContent = `今日：${(d.me && d.me.today && d.me.today.done) ? "達成" : "未達"}`;
+
+  renderCalendar(d.monthKey, (d.me && d.me.monthDoneDates) ? d.me.monthDoneDates : [], d.today);
 
   if(d.model && d.model.userId){
-    el.modelValue.textContent = d.model.today.done ? "達成です" : "未達です";
-    el.modelSub.textContent = d.model.today.done
-      ? `記帳時刻：${d.model.today.timestamp || "時刻未設定"}`
+    const done = d.model.today && d.model.today.done;
+    el.modelValue.textContent = done ? "達成です" : "未達です";
+    el.modelSub.textContent = done
+      ? `記帳時刻：${(d.model.today && d.model.today.timestamp) ? d.model.today.timestamp : "時刻未設定"}`
       : "今日はまだ押していません";
   }else{
     el.modelValue.textContent = "--";
@@ -665,8 +636,8 @@ function applyDashboard(d){
   }
 
   const r = d.retention || {};
-  const a7 = Number(r.active7dRate ?? 0);
-  const ma = Number(r.monthAvgRate ?? 0);
+  const a7 = Number(r.active7dRate || 0);
+  const ma = Number(r.monthAvgRate || 0);
   el.retValue.textContent = `直近7日：${Math.round(a7 * 100)}%`;
   el.retSub.textContent  = `今月平均：${Math.round(ma * 100)}%（延べ出席 / 延べ日数）`;
 }
@@ -683,7 +654,7 @@ async function refreshDashboard(note){
     return;
   }
   try{
-    const d = await callApi("getDashboard", token);
+    const d = await callApi("getDashboard", { token });
     if(!d || !d.ok) throw new Error("ダッシュボード取得に失敗しました");
     applyDashboard(d);
     showOverlay(false);
@@ -704,10 +675,11 @@ async function doLogin(){
     toast("PINは4桁の数字にしてください");
     return;
   }
+
   try{
-    const res = await callApi("login", pin);
-    if(!res.ok){
-      toast(res.message || "ログインできません");
+    const res = await callApi("login", { pin4: pin });
+    if(!res || !res.ok){
+      toast((res && (res.message || res.error)) ? (res.message || res.error) : "ログインできません");
       return;
     }
     token = res.token;
@@ -734,11 +706,12 @@ async function doRegister(){
   }
 
   try{
-    const res = await callApi("registerUser", name, pin);
-    if(!res.ok){
-      toast(res.message || "登録できません");
+    const res = await callApi("registerUser", { displayName: name, pin4: pin });
+    if(!res || !res.ok){
+      toast((res && (res.message || res.error)) ? (res.message || res.error) : "登録できません");
       return;
     }
+    // 登録したPINでそのままログイン
     el.pinLogin.value = pin;
     el.regName.value = "";
     el.pinReg.value = "";
@@ -754,7 +727,7 @@ async function doCheckin(){
     return;
   }
   try{
-    await callApi("checkin", token, 20);
+    await callApi("checkin", { token, reps: 20 });
     await refreshDashboard("記帳しました");
   }catch(e){
     toast(e.message || String(e));
