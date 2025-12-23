@@ -1,1 +1,799 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>スクワット出席</title>
+  <meta name="description" content="スクワット継続Record（モックUI準拠）" />
+  <style>
+    :root{
+      --bg:#ffffff;
+      --card:#fafafa;
+      --line:#e6e6e6;
+      --text:#111;
+      --muted:#666;
+      --shadow: 0 1px 2px rgba(0,0,0,.05);
+      --r:16px;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
+      background:var(--bg);
+      color:var(--text);
+    }
+
+    .app{
+      height:100vh;
+      padding: 12px;
+      padding-top: calc(12px + env(safe-area-inset-top));
+      padding-bottom: calc(12px + env(safe-area-inset-bottom));
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      overflow:hidden;
+    }
+
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius: var(--r);
+      box-shadow: var(--shadow);
+      padding: 12px;
+      overflow:hidden;
+    }
+
+    .row{ display:flex; gap:10px; align-items:center; }
+    .grow{ flex:1; }
+    h1{ margin:0; font-size:14px; letter-spacing:.2px; }
+    .muted{ color:var(--muted); font-size:12px; }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 10px;
+      border-radius:999px;
+      background:#fff;
+      border:1px solid var(--line);
+      font-size:12px;
+      white-space:nowrap;
+    }
+
+    select, input{
+      width:100%;
+      padding:10px 12px;
+      border-radius: 14px;
+      border:1px solid var(--line);
+      background:#fff;
+      font-size:16px;
+      outline:none;
+    }
+    select:disabled{
+      background:#f6f6f6;
+      color:#777;
+    }
+
+    button{
+      border:0;
+      border-radius: 16px;
+      padding: 14px 12px;
+      font-size:18px;
+      font-weight:700;
+      cursor:pointer;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button:active{ transform: scale(.99); }
+
+    .btnPrimary{ background:#111; color:#fff; }
+    .btnGhost{
+      background:#fff; color:#111;
+      border:1px solid var(--line);
+      font-size:14px; font-weight:600;
+      padding: 10px 12px;
+    }
+    .btnDanger{
+      background:#fff; color:#a00;
+      border:1px solid #f1caca;
+      font-size:14px; font-weight:700;
+      padding: 10px 12px;
+    }
+
+    .main{
+      flex:1 1 auto;
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+
+    .calendarWrap{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius: var(--r);
+      padding:10px;
+      overflow:hidden;
+    }
+    .calendar{
+      display:grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap:6px;
+      user-select:none;
+    }
+    .dow{
+      font-size:11px;
+      color:var(--muted);
+      text-align:center;
+      padding: 2px 0;
+    }
+    .day{
+      aspect-ratio: 1 / 1;
+      border-radius: 12px;
+      border:1px solid var(--line);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:12px;
+      background:#fff;
+      color:#111;
+      position:relative;
+      overflow:hidden;
+    }
+    .day.off{
+      background:#f6f6f6;
+      color:#bbb;
+    }
+    .day.done{
+      background:#111;
+      color:#fff;
+      border-color:#111;
+    }
+    .day.today{
+      outline:2px solid rgba(0,0,0,.25);
+      outline-offset:1px;
+    }
+
+    .bottomGrid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+    }
+    .miniCard{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius: var(--r);
+      padding:10px;
+      overflow:hidden;
+    }
+    .label{ font-size:12px; color:var(--muted); }
+    .value{ margin-top:4px; font-size:18px; font-weight:800; }
+    .sub{ margin-top:4px; font-size:12px; color:var(--muted); line-height:1.2; }
+
+    .msg{
+      font-size:11px;
+      color:var(--muted);
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .linkBtn{
+      appearance:none;
+      background:transparent;
+      border:0;
+      padding:0;
+      margin:0;
+      color:#111;
+      font-size:11px;
+      font-weight:700;
+      text-decoration: underline;
+      cursor:pointer;
+    }
+
+    /* ログインオーバーレイ */
+    .overlay{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.35);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:12px;
+      z-index:999;
+    }
+    .overlay.show{ display:flex; }
+    .modal{
+      width:min(520px, 100%);
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.15);
+      padding:12px;
+    }
+    .modal h2{
+      margin:0 0 8px;
+      font-size:14px;
+    }
+    .modal .help{
+      margin:0 0 10px;
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.4;
+    }
+    .pinRow{
+      display:flex;
+      gap:10px;
+      align-items:center;
+    }
+    .pinInput{
+      font-size:20px;
+      letter-spacing: .3em;
+      text-align:center;
+    }
+    .hr{
+      height:1px;
+      background:var(--line);
+      margin:10px 0;
+    }
+    .toast{
+      margin-top:8px;
+      font-size:12px;
+      color:#a00;
+      display:none;
+    }
+    .toast.show{ display:block; }
+
+    @media (max-height: 740px){
+      button{ padding: 12px 12px; font-size:17px; border-radius:14px; }
+      .calendarWrap{ padding:8px; }
+      .calendar{ gap:5px; }
+      .day{ border-radius:10px; font-size:11px; }
+      .bottomGrid{ gap:8px; }
+      .miniCard{ padding:8px; }
+      .value{ font-size:16px; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- ログイン / 登録 -->
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <h2>PINでログイン</h2>
+      <p class="help">4桁PINを入力してくださいです。初回は下で登録できますです。</p>
+
+      <div class="pinRow">
+        <input
+          id="pinLogin"
+          class="pinInput"
+          type="password"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          maxlength="4"
+          placeholder="••••"
+          autocomplete="one-time-code"
+        />
+        <button class="btnPrimary" id="btnLogin" style="flex:0 0 120px;">ログイン</button>
+      </div>
+
+      <div class="toast" id="toast"></div>
+
+      <div class="hr"></div>
+
+      <h2>初回登録</h2>
+      <p class="help">表示名と4桁PINを登録しますです。同じPINは使えませんです。</p>
+
+      <div class="row">
+        <div class="grow">
+          <div class="muted" style="margin:0 0 6px;">表示名</div>
+          <input id="regName" maxlength="40" placeholder="ユーザー名（例：ちな雲丹）" />
+        </div>
+      </div>
+
+      <div class="pinRow" style="margin-top:10px;">
+        <input
+          id="pinReg"
+          class="pinInput"
+          type="password"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          maxlength="4"
+          placeholder="••••"
+        />
+        <button class="btnGhost" id="btnRegister" style="flex:0 0 120px;">登録</button>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <button class="btnGhost" id="btnCloseOverlay">閉じる</button>
+      </div>
+
+      <div class="msg" style="margin-top:8px;">
+        <span id="modeHint"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- メインUI（モック準拠） -->
+  <div class="app">
+    <!-- 上部：ユーザー呼び出し -->
+    <div class="card">
+      <div class="row" style="justify-content:space-between;">
+        <h1>スクワット出席（20回）</h1>
+        <span class="pill" id="statusPill">状態：未記帳</span>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <div class="grow">
+          <div class="muted" style="margin:0 0 6px;">ユーザー呼び出し</div>
+          <select id="userSelect" disabled>
+            <option>未ログイン</option>
+          </select>
+        </div>
+
+        <div style="width:92px;">
+          <div class="muted" style="margin:0 0 6px;">更新</div>
+          <button class="btnGhost" type="button" id="btnReload">更新</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 真ん中：大ボタン -->
+    <button class="btnPrimary" type="button" id="btnCheckin">スクワットやったよボタン</button>
+
+    <!-- 下部：カレンダー＋KPI -->
+    <div class="card main">
+      <div class="row" style="justify-content:space-between;">
+        <div>
+          <div class="muted" id="monthLabel">----（Asia/Tokyo）</div>
+          <div class="value" style="font-size:16px;">今月の出席</div>
+        </div>
+        <div class="row" style="gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+          <span class="pill" id="kpiMonthCount">自分：--回</span>
+          <span class="pill" id="kpiStreak">連続：--日</span>
+          <span class="pill" id="kpiToday">今日：--</span>
+        </div>
+      </div>
+
+      <div class="calendarWrap">
+        <div class="calendar" id="calendar"></div>
+      </div>
+
+      <div class="bottomGrid">
+        <div class="miniCard">
+          <div class="label">ちな雲丹のデータ：今日の進捗</div>
+          <div class="value" id="modelValue">--</div>
+          <div class="sub" id="modelSub">--</div>
+        </div>
+        <div class="miniCard">
+          <div class="label">全体の継続率</div>
+          <div class="value" id="retValue">--</div>
+          <div class="sub" id="retSub">--</div>
+        </div>
+      </div>
+
+      <div class="row" style="justify-content:space-between;">
+        <div class="msg" id="msg">準備中です</div>
+        <button class="linkBtn" id="btnLogout" type="button">ログアウト</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ============================
+   実行モード判定
+   - GASのHTMLService上: google.script.run が使えます
+   - GitHub Pages等: mockで動かします
+============================ */
+const IS_GAS = (typeof google !== "undefined" && google.script && google.script.run);
+document.getElementById("modeHint").textContent = IS_GAS
+  ? "GASモードです（google.script.run使用）"
+  : "モックモードです（GitHub Pages等で動作）";
+
+/* ============================
+   DOM
+============================ */
+const el = {
+  overlay: document.getElementById("overlay"),
+  toast: document.getElementById("toast"),
+  pinLogin: document.getElementById("pinLogin"),
+  pinReg: document.getElementById("pinReg"),
+  regName: document.getElementById("regName"),
+  btnLogin: document.getElementById("btnLogin"),
+  btnRegister: document.getElementById("btnRegister"),
+  btnCloseOverlay: document.getElementById("btnCloseOverlay"),
+
+  statusPill: document.getElementById("statusPill"),
+  userSelect: document.getElementById("userSelect"),
+  btnReload: document.getElementById("btnReload"),
+  btnCheckin: document.getElementById("btnCheckin"),
+
+  monthLabel: document.getElementById("monthLabel"),
+  kpiMonthCount: document.getElementById("kpiMonthCount"),
+  kpiStreak: document.getElementById("kpiStreak"),
+  kpiToday: document.getElementById("kpiToday"),
+
+  calendar: document.getElementById("calendar"),
+
+  modelValue: document.getElementById("modelValue"),
+  modelSub: document.getElementById("modelSub"),
+  retValue: document.getElementById("retValue"),
+  retSub: document.getElementById("retSub"),
+
+  msg: document.getElementById("msg"),
+  btnLogout: document.getElementById("btnLogout"),
+};
+
+/* ============================
+   ストレージ
+============================ */
+const STORAGE_KEY = "squat_app_token";
+function loadToken(){
+  try { return localStorage.getItem(STORAGE_KEY) || ""; } catch(e){ return ""; }
+}
+function saveToken(t){
+  try { localStorage.setItem(STORAGE_KEY, t); } catch(e){}
+}
+function clearToken(){
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e){}
+}
+
+/* ============================
+   モック実装（GitHub Pages用）
+   ※GASに載せるときは使われません
+============================ */
+const mock = (() => {
+  const USERS = [
+    { userId:"u1", name:"ユーザー１", pin:"1234" },
+    { userId:"u2", name:"ちな雲丹", pin:"7777", isModel:true },
+  ];
+  const DONE = {
+    u1: new Set(["2025-12-01","2025-12-02","2025-12-04","2025-12-05","2025-12-19"]),
+    u2: new Set(["2025-12-01","2025-12-03","2025-12-04","2025-12-06"]),
+  };
+  const TODAY = tzTodayYMD();
+  const monthKey = TODAY.slice(0,7);
+
+  function tzTodayYMD(){
+    const parts = new Intl.DateTimeFormat("ja-JP", {
+      timeZone: "Asia/Tokyo",
+      year: "numeric", month: "2-digit", day: "2-digit"
+    }).formatToParts(new Date());
+    const y = parts.find(p=>p.type==="year").value;
+    const m = parts.find(p=>p.type==="month").value;
+    const d = parts.find(p=>p.type==="day").value;
+    return `${y}-${m}-${d}`;
+  }
+
+  const sessions = new Map(); // token -> userId
+
+  function registerUser(name, pin4){
+    if(!/^\d{4}$/.test(pin4)) return { ok:false, code:"PIN_FMT", message:"PINは4桁です" };
+    if(USERS.some(u => u.pin === pin4)) return { ok:false, code:"PIN_DUP", message:"そのPINは既に使用されています" };
+    const userId = "u" + (USERS.length + 1);
+    USERS.push({ userId, name, pin: pin4 });
+    DONE[userId] = new Set();
+    return { ok:true, userId, name };
+  }
+
+  function login(pin4){
+    const u = USERS.find(x => x.pin === pin4);
+    if(!u) return { ok:false, code:"NOT_FOUND", message:"PINが見つかりません" };
+    const token = "mock-" + Math.random().toString(16).slice(2);
+    sessions.set(token, u.userId);
+    return { ok:true, token, userId:u.userId, name:u.name };
+  }
+
+  function checkin(token, reps){
+    const uid = sessions.get(token);
+    if(!uid) throw new Error("セッション切れです");
+    DONE[uid].add(TODAY);
+    return { ok:true, date:TODAY, name: USERS.find(u=>u.userId===uid).name, timestamp:"22:41" };
+  }
+
+  function getDashboard(token){
+    const uid = sessions.get(token);
+    if(!uid) throw new Error("セッション切れです");
+    const me = USERS.find(u=>u.userId===uid);
+    const myDates = Array.from(DONE[uid]).filter(d => d.startsWith(monthKey)).sort();
+    const todayDone = DONE[uid].has(TODAY);
+    const model = USERS.find(u=>u.isModel) || null;
+    const modelDone = model ? DONE[model.userId].has(TODAY) : false;
+
+    // 適当な継続率
+    const retention = { active7dRate:0.58, monthAvgRate:0.42 };
+
+    return {
+      ok:true,
+      today:TODAY,
+      monthKey,
+      me:{
+        userId:uid,
+        name:me.name,
+        today:{ done:todayDone, timestamp: todayDone ? "22:41" : "" },
+        monthDoneDates: myDates,
+        monthCount: myDates.length,
+        streak: 3
+      },
+      model:{
+        userId: model ? model.userId : "",
+        today:{ done:modelDone, timestamp: modelDone ? "07:12" : "" }
+      },
+      retention
+    };
+  }
+
+  return { registerUser, login, checkin, getDashboard };
+})();
+
+/* ============================
+   GAS呼び出しラッパー（Promise）
+============================ */
+function callApi(name, ...args){
+  if(!IS_GAS){
+    // モックにフォールバック
+    return Promise.resolve(mock[name](...args));
+  }
+
+  return new Promise((resolve, reject) => {
+    // google.script.run.<name>(...args)
+    const runner = google.script.run
+      .withSuccessHandler(resolve)
+      .withFailureHandler(err => {
+        const msg = (err && err.message) ? err.message : String(err);
+        reject(new Error(msg));
+      });
+
+    if(typeof runner[name] !== "function"){
+      reject(new Error(`API ${name} が見つかりません`));
+      return;
+    }
+    runner[name](...args);
+  });
+}
+
+/* ============================
+   UIヘルパー
+============================ */
+function showOverlay(on){
+  el.overlay.classList.toggle("show", !!on);
+}
+function toast(msg){
+  el.toast.textContent = msg;
+  el.toast.classList.add("show");
+}
+function clearToast(){
+  el.toast.textContent = "";
+  el.toast.classList.remove("show");
+}
+function setMsg(text){
+  el.msg.textContent = text;
+}
+
+/* ============================
+   カレンダー描画（6週固定）
+============================ */
+function renderCalendar(monthKey, doneDates, todayYmd){
+  // monthKey: YYYY-MM
+  const [y, m] = monthKey.split("-").map(Number);
+  el.calendar.innerHTML = "";
+
+  const dows = ["日","月","火","水","木","金","土"];
+  for(const d of dows){
+    const e = document.createElement("div");
+    e.className = "dow";
+    e.textContent = d;
+    el.calendar.appendChild(e);
+  }
+
+  // UTCで日付計算してズレ回避
+  const first = new Date(Date.UTC(y, m-1, 1));
+  const last  = new Date(Date.UTC(y, m, 0));
+  const startDow = first.getUTCDay();
+  const totalDays = last.getUTCDate();
+  const cells = 42;
+
+  const doneSet = new Set(doneDates);
+
+  for(let i=0;i<cells;i++){
+    const dayNum = i - startDow + 1;
+    const cell = document.createElement("div");
+
+    if(dayNum < 1 || dayNum > totalDays){
+      cell.className = "day off";
+      cell.textContent = "";
+    }else{
+      const dateStr = `${y}-${String(m).padStart(2,"0")}-${String(dayNum).padStart(2,"0")}`;
+      cell.className = "day";
+      cell.textContent = String(dayNum);
+
+      if(doneSet.has(dateStr)) cell.classList.add("done");
+      if(dateStr === todayYmd) cell.classList.add("today");
+    }
+    el.calendar.appendChild(cell);
+  }
+}
+
+/* ============================
+   描画：ダッシュボード反映
+============================ */
+function applyDashboard(d){
+  // user
+  el.userSelect.innerHTML = "";
+  const opt = document.createElement("option");
+  opt.textContent = d.me.name;
+  el.userSelect.appendChild(opt);
+
+  // status pill
+  if(d.me.today.done){
+    el.statusPill.textContent = `状態：今日 記帳済み（${d.me.today.timestamp || "時刻未設定"}）`;
+  }else{
+    el.statusPill.textContent = "状態：今日は未記帳です";
+  }
+
+  // month label
+  el.monthLabel.textContent = `${d.monthKey}（Asia/Tokyo）`;
+
+  // KPI
+  el.kpiMonthCount.textContent = `自分：${d.me.monthCount ?? d.me.monthDoneDates.length}回`;
+  el.kpiStreak.textContent = `連続：${d.me.streak ?? "--"}日`;
+  el.kpiToday.textContent = `今日：${d.me.today.done ? "達成" : "未達"}`;
+
+  // calendar
+  renderCalendar(d.monthKey, d.me.monthDoneDates || [], d.today);
+
+  // model user
+  if(d.model && d.model.userId){
+    el.modelValue.textContent = d.model.today.done ? "達成です" : "未達です";
+    el.modelSub.textContent = d.model.today.done
+      ? `記帳時刻：${d.model.today.timestamp || "時刻未設定"}`
+      : "今日はまだ押していません";
+  }else{
+    el.modelValue.textContent = "--";
+    el.modelSub.textContent = "モデルユーザー未設定です";
+  }
+
+  // retention
+  const r = d.retention || {};
+  const a7 = Number(r.active7dRate ?? 0);
+  const ma = Number(r.monthAvgRate ?? 0);
+  el.retValue.textContent = `直近7日：${Math.round(a7 * 100)}%`;
+  el.retSub.textContent  = `今月平均：${Math.round(ma * 100)}%（延べ出席 / 延べ日数）`;
+}
+
+/* ============================
+   主要処理
+============================ */
+let token = "";
+
+async function refreshDashboard(note){
+  if(!token){
+    showOverlay(true);
+    setMsg("未ログインです");
+    return;
+  }
+  try{
+    const d = await callApi("getDashboard", token);
+    if(!d || !d.ok) throw new Error("ダッシュボード取得に失敗しました");
+    applyDashboard(d);
+    showOverlay(false);
+    setMsg(note || "更新しました");
+  }catch(e){
+    clearToken();
+    token = "";
+    showOverlay(true);
+    setMsg("セッション切れです");
+    toast(e.message || String(e));
+  }
+}
+
+async function doLogin(){
+  clearToast();
+  const pin = (el.pinLogin.value || "").trim();
+  if(!/^\d{4}$/.test(pin)){
+    toast("PINは4桁の数字にしてください");
+    return;
+  }
+  try{
+    const res = await callApi("login", pin);
+    if(!res.ok){
+      toast(res.message || "ログインできません");
+      return;
+    }
+    token = res.token;
+    saveToken(token);
+    el.pinLogin.value = "";
+    await refreshDashboard("ログインしました");
+  }catch(e){
+    toast(e.message || String(e));
+  }
+}
+
+async function doRegister(){
+  clearToast();
+  const name = (el.regName.value || "").trim();
+  const pin = (el.pinReg.value || "").trim();
+
+  if(!name){
+    toast("表示名が空です");
+    return;
+  }
+  if(!/^\d{4}$/.test(pin)){
+    toast("PINは4桁の数字にしてください");
+    return;
+  }
+
+  try{
+    const res = await callApi("registerUser", name, pin);
+    if(!res.ok){
+      // PIN_DUP を想定
+      toast(res.message || "登録できません");
+      return;
+    }
+    // 登録できたらそのPINでログイン
+    el.pinLogin.value = pin;
+    el.regName.value = "";
+    el.pinReg.value = "";
+    await doLogin();
+  }catch(e){
+    toast(e.message || String(e));
+  }
+}
+
+async function doCheckin(){
+  if(!token){
+    showOverlay(true);
+    return;
+  }
+  try{
+    await callApi("checkin", token, 20);
+    await refreshDashboard("記帳しました");
+  }catch(e){
+    toast(e.message || String(e));
+    showOverlay(true);
+  }
+}
+
+function logout(){
+  clearToken();
+  token = "";
+  el.userSelect.innerHTML = "<option>未ログイン</option>";
+  el.statusPill.textContent = "状態：未記帳";
+  showOverlay(true);
+  setMsg("ログアウトしました");
+}
+
+/* ============================
+   イベント
+============================ */
+el.btnLogin.addEventListener("click", doLogin);
+el.btnRegister.addEventListener("click", doRegister);
+el.btnCloseOverlay.addEventListener("click", () => showOverlay(false));
+
+el.btnReload.addEventListener("click", () => refreshDashboard("更新しました"));
+el.btnCheckin.addEventListener("click", doCheckin);
+el.btnLogout.addEventListener("click", logout);
+
+// Enterでログイン
+el.pinLogin.addEventListener("keydown", (e) => {
+  if(e.key === "Enter") doLogin();
+});
+el.pinReg.addEventListener("keydown", (e) => {
+  if(e.key === "Enter") doRegister();
+});
+
+/* ============================
+   起動
+============================ */
+(function boot(){
+  token = loadToken();
+  if(token){
+    refreshDashboard("復帰しました");
+  }else{
+    showOverlay(true);
+    setMsg("未ログインです");
+  }
+})();
+</script>
+</body>
+</html>
 
