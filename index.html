@@ -177,6 +177,7 @@
       overflow:hidden;
       text-overflow:ellipsis;
     }
+
     .linkBtn{
       appearance:none;
       background:transparent;
@@ -188,6 +189,13 @@
       font-weight:700;
       text-decoration: underline;
       cursor:pointer;
+    }
+    a.linkA{
+      color:#111;
+      font-size:11px;
+      font-weight:700;
+      text-decoration: underline;
+      white-space:nowrap;
     }
 
     /* ログインオーバーレイ */
@@ -373,21 +381,36 @@
 
       <div class="row" style="justify-content:space-between;">
         <div class="msg" id="msg">準備中です</div>
-        <button class="linkBtn" id="btnLogout" type="button">ログアウト</button>
+
+        <div class="row" style="gap:10px;">
+          <!-- ★ここにスプレッドシートURLを表示 -->
+          <a class="linkA" id="sheetLink" href="#" target="_blank" rel="noopener">シートを開く</a>
+          <button class="linkBtn" id="btnLogout" type="button">ログアウト</button>
+        </div>
       </div>
     </div>
   </div>
 
 <script>
 /* ============================
+   スプレッドシートURL（埋め込み）
+============================ */
+const SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1SxDeRMLWW3BXAYjaV8X8AJGX9xnnHg8vHxvAdOEKSGM/edit?gid=907152310#gid=907152310";
+
+/* ============================
    実行モード判定
    - GASのHTMLService上: google.script.run が使えます
    - GitHub Pages等: mockで動かします
 ============================ */
 const IS_GAS = (typeof google !== "undefined" && google.script && google.script.run);
+
 document.getElementById("modeHint").textContent = IS_GAS
   ? "GASモードです（google.script.run使用）"
   : "モックモードです（GitHub Pages等で動作）";
+
+/* シートリンク反映 */
+const sheetLink = document.getElementById("sheetLink");
+sheetLink.href = SPREADSHEET_URL;
 
 /* ============================
    DOM
@@ -499,7 +522,6 @@ const mock = (() => {
     const model = USERS.find(u=>u.isModel) || null;
     const modelDone = model ? DONE[model.userId].has(TODAY) : false;
 
-    // 適当な継続率
     const retention = { active7dRate:0.58, monthAvgRate:0.42 };
 
     return {
@@ -530,12 +552,10 @@ const mock = (() => {
 ============================ */
 function callApi(name, ...args){
   if(!IS_GAS){
-    // モックにフォールバック
     return Promise.resolve(mock[name](...args));
   }
 
   return new Promise((resolve, reject) => {
-    // google.script.run.<name>(...args)
     const runner = google.script.run
       .withSuccessHandler(resolve)
       .withFailureHandler(err => {
@@ -573,7 +593,6 @@ function setMsg(text){
    カレンダー描画（6週固定）
 ============================ */
 function renderCalendar(monthKey, doneDates, todayYmd){
-  // monthKey: YYYY-MM
   const [y, m] = monthKey.split("-").map(Number);
   el.calendar.innerHTML = "";
 
@@ -585,7 +604,6 @@ function renderCalendar(monthKey, doneDates, todayYmd){
     el.calendar.appendChild(e);
   }
 
-  // UTCで日付計算してズレ回避
   const first = new Date(Date.UTC(y, m-1, 1));
   const last  = new Date(Date.UTC(y, m, 0));
   const startDow = first.getUTCDay();
@@ -617,31 +635,25 @@ function renderCalendar(monthKey, doneDates, todayYmd){
    描画：ダッシュボード反映
 ============================ */
 function applyDashboard(d){
-  // user
   el.userSelect.innerHTML = "";
   const opt = document.createElement("option");
   opt.textContent = d.me.name;
   el.userSelect.appendChild(opt);
 
-  // status pill
   if(d.me.today.done){
     el.statusPill.textContent = `状態：今日 記帳済み（${d.me.today.timestamp || "時刻未設定"}）`;
   }else{
     el.statusPill.textContent = "状態：今日は未記帳です";
   }
 
-  // month label
   el.monthLabel.textContent = `${d.monthKey}（Asia/Tokyo）`;
 
-  // KPI
   el.kpiMonthCount.textContent = `自分：${d.me.monthCount ?? d.me.monthDoneDates.length}回`;
   el.kpiStreak.textContent = `連続：${d.me.streak ?? "--"}日`;
   el.kpiToday.textContent = `今日：${d.me.today.done ? "達成" : "未達"}`;
 
-  // calendar
   renderCalendar(d.monthKey, d.me.monthDoneDates || [], d.today);
 
-  // model user
   if(d.model && d.model.userId){
     el.modelValue.textContent = d.model.today.done ? "達成です" : "未達です";
     el.modelSub.textContent = d.model.today.done
@@ -652,7 +664,6 @@ function applyDashboard(d){
     el.modelSub.textContent = "モデルユーザー未設定です";
   }
 
-  // retention
   const r = d.retention || {};
   const a7 = Number(r.active7dRate ?? 0);
   const ma = Number(r.monthAvgRate ?? 0);
@@ -725,11 +736,9 @@ async function doRegister(){
   try{
     const res = await callApi("registerUser", name, pin);
     if(!res.ok){
-      // PIN_DUP を想定
       toast(res.message || "登録できません");
       return;
     }
-    // 登録できたらそのPINでログイン
     el.pinLogin.value = pin;
     el.regName.value = "";
     el.pinReg.value = "";
@@ -773,7 +782,6 @@ el.btnReload.addEventListener("click", () => refreshDashboard("更新しまし�
 el.btnCheckin.addEventListener("click", doCheckin);
 el.btnLogout.addEventListener("click", logout);
 
-// Enterでログイン
 el.pinLogin.addEventListener("keydown", (e) => {
   if(e.key === "Enter") doLogin();
 });
@@ -796,4 +804,3 @@ el.pinReg.addEventListener("keydown", (e) => {
 </script>
 </body>
 </html>
-
