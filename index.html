@@ -87,6 +87,12 @@
     button:active{ transform: scale(.99); }
 
     .btnPrimary{ background:#111; color:#fff; }
+    #btnCheckin{
+      display:block;
+      width:100%;
+      padding: 22px 16px;
+      font-size:22px;
+    }
     .btnGhost{
       background:#fff; color:#111;
       border:1px solid var(--line);
@@ -145,9 +151,9 @@
       color:#bbb;
     }
     .day.done{
-      background:#111;
-      color:#fff;
-      border-color:#111;
+      background:#ffe5c2;
+      color:#8a4b0a;
+      border-color:#ffc88a;
     }
     .day.today{
       outline:2px solid rgba(0,0,0,.25);
@@ -243,6 +249,8 @@
       display:none;
     }
     .toast.show{ display:block; }
+
+    .hidden{ display:none !important; }
 
     @media (max-height: 740px){
       button{ padding: 12px 12px; font-size:17px; border-radius:14px; }
@@ -592,8 +600,10 @@ function applyDashboard(d){
 
   if(d.me.today && d.me.today.done){
     el.statusPill.textContent = `状態：今日 記帳済み（${d.me.today.timestamp || "時刻未設定"}）`;
+    el.btnCheckin.classList.add("hidden");
   }else{
     el.statusPill.textContent = "状態：今日は未記帳です";
+    el.btnCheckin.classList.remove("hidden");
   }
 
   el.monthLabel.textContent = `${d.monthKey}（Asia/Tokyo）`;
