@@ -5,7 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>スクワット出席</title>
-  <meta name="description" content="スクワット継続Record（GitHub Pages + GAS(JSONP)）" />
+  <meta name="description" content="スクワット継続Record（GitHub Pages + GAS）" />
   <style>
     :root{
       --bg:#ffffff;
@@ -17,22 +17,27 @@
       --r:16px;
     }
     *{ box-sizing:border-box; }
+    html, body { height:100%; }
     body{
       margin:0;
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
       background:var(--bg);
       color:var(--text);
+      -webkit-text-size-adjust: 100%;
+      overscroll-behavior: none;
     }
 
+    /* ===== App layout ===== */
     .app{
-      height:100vh;
+      min-height: 100dvh; /* mobile address bar対策 */
       padding: 12px;
       padding-top: calc(12px + env(safe-area-inset-top));
       padding-bottom: calc(12px + env(safe-area-inset-bottom));
       display:flex;
       flex-direction:column;
       gap:10px;
-      overflow:hidden;
+      max-width: 900px;
+      margin: 0 auto;
     }
 
     .card{
@@ -45,6 +50,7 @@
     }
 
     .row{ display:flex; gap:10px; align-items:center; }
+    .wrap{ flex-wrap:wrap; }
     .justifyBetween{ justify-content:space-between; }
     .grow{ flex:1; }
     .mb6{ margin:0 0 6px; }
@@ -71,7 +77,7 @@
       border-radius: 14px;
       border:1px solid var(--line);
       background:#fff;
-      font-size:16px;
+      font-size:16px; /* iOSの自動ズーム回避 */
       outline:none;
     }
     select:disabled{
@@ -83,26 +89,30 @@
       border:0;
       border-radius: 16px;
       padding: 14px 12px;
-      font-size:18px;
+      font-size:16px;
       font-weight:700;
       cursor:pointer;
       user-select:none;
       -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      white-space:nowrap;
     }
     button:active{ transform: scale(.99); }
 
     .btnPrimary{ background:#111; color:#fff; }
-    #btnCheckin{
-      display:block;
-      width:100%;
-      padding: 26px 18px;
-      font-size:24px;
-    }
     .btnGhost{
       background:#fff; color:#111;
       border:1px solid var(--line);
-      font-size:14px; font-weight:600;
+      font-size:14px; font-weight:700;
       padding: 10px 12px;
+    }
+
+    #btnCheckin{
+      display:block;
+      width:100%;
+      padding: 22px 18px;
+      font-size:22px;
+      border-radius: 18px;
     }
 
     .main{
@@ -113,6 +123,25 @@
       gap:10px;
     }
 
+    /* ===== Header layout helpers ===== */
+    .headerTop{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      align-items:flex-start;
+    }
+    .headerRight{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      justify-content:flex-end;
+      flex-wrap:wrap;
+      min-width: 260px;
+    }
+    .headerRight .btnGhost{ padding: 10px 12px; }
+    .headerRight select{ min-width: 220px; }
+
+    /* ===== Calendar ===== */
     .calendarWrap{
       background:#fff;
       border:1px solid var(--line);
@@ -126,6 +155,7 @@
       justify-content:space-between;
       gap:8px;
       margin-bottom:8px;
+      flex-wrap:wrap;
     }
     .navGroup{ display:flex; gap:6px; align-items:center; }
     .navBtn{
@@ -135,7 +165,7 @@
       border-radius: 12px;
       padding: 8px 10px;
       font-size:14px;
-      font-weight:700;
+      font-weight:800;
       cursor:pointer;
       min-width:44px;
     }
@@ -144,7 +174,7 @@
       color:#aaa;
       background:#f7f7f7;
     }
-    .navLabel{ font-size:13px; font-weight:700; }
+    .navLabel{ font-size:13px; font-weight:800; }
     .calendar{
       display:grid;
       grid-template-columns: repeat(7, 1fr);
@@ -170,10 +200,6 @@
       position:relative;
       overflow:hidden;
     }
-    .day.off{
-      background:#f6f6f6;
-      color:#bbb;
-    }
     .day.done{
       background:#fff1e1;
       color:#9a4b00;
@@ -184,43 +210,13 @@
       outline:2px solid rgba(0,0,0,.25);
       outline-offset:1px;
     }
-    .day.nodata{
-      background:#f2f2f2;
-      color:#999;
-      border-style:dashed;
-    }
 
+    /* ===== Bottom cards ===== */
     .bottomGrid{
       display:grid;
       grid-template-columns: 1fr 1fr;
       gap:10px;
     }
-    .legend{
-      display:flex;
-      align-items:center;
-      gap:6px;
-      font-size:12px;
-      color:var(--muted);
-      margin-top:10px;
-    }
-    .legendItem{
-      display:flex;
-      align-items:center;
-      gap:6px;
-    }
-    .legendSwatch{
-      width:20px;
-      height:10px;
-      border-radius:99px;
-      background:#f6f6f6;
-      border:1px solid var(--line);
-    }
-    .legendSwatch.done{
-      background:#fff1e1;
-      border-color:#ffcc99;
-      box-shadow: inset 0 0 0 1px #ffc488;
-    }
-
     .miniCard{
       background:#fff;
       border:1px solid var(--line);
@@ -237,11 +233,12 @@
     }
     .miniCard .value{
       font-size:24px;
-      font-weight:700;
-      letter-spacing:1px;
+      font-weight:800;
+      letter-spacing:.5px;
     }
     .miniCard .sub{
       font-size:12px; color:var(--muted);
+      line-height:1.35;
     }
 
     .msg{
@@ -260,6 +257,7 @@
       cursor:pointer;
     }
 
+    /* ===== Toast / Modal ===== */
     .toast{
       position:fixed;
       left:50%;
@@ -275,6 +273,8 @@
       transition: all .25s ease;
       box-shadow: var(--shadow);
       z-index:20;
+      max-width: min(92vw, 560px);
+      text-align:center;
     }
     .toast.show{
       opacity:1;
@@ -293,807 +293,8 @@
       opacity:0;
       visibility:hidden;
       transition: all .2s ease;
+      padding: 12px;
+      padding-top: calc(12px + env(safe-area-inset-top));
+      padding-bottom: calc(12px + env(safe-area-inset-bottom));
     }
-    .overlay.show{
-      opacity:1;
-      visibility:visible;
-    }
-    .modal{
-      background:#fff;
-      border:1px solid var(--line);
-      border-radius:20px;
-      min-width: min(420px, 94vw);
-      box-shadow: 0 16px 40px rgba(0,0,0,.12);
-      max-width: min(520px, 94vw);
-      overflow:hidden;
-      animation: pop .12s ease;
-    }
-    @keyframes pop {
-      from{ transform:scale(.98) translateY(4px); opacity:0; }
-      to{ transform:scale(1) translateY(0px); opacity:1; }
-    }
-    .modalHeader{
-      padding: 14px 16px;
-      border-bottom:1px solid var(--line);
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-    }
-    .modalHeader h2{
-      margin:0;
-      font-size:16px;
-    }
-    .modalBody{
-      padding: 14px 16px 18px;
-    }
-    .modal h3{
-      margin:0 0 6px;
-      font-size:13px;
-    }
-    .modal .desc{
-      margin:0 0 12px;
-      color:var(--muted);
-      font-size:12px;
-      line-height:1.5;
-    }
-    .modal small{
-      display:block;
-      margin-top:6px;
-      color:var(--muted);
-      font-size:12px;
-      line-height:1.4;
-    }
-    .modal .hint{
-      background:#fff9e6;
-      border:1px solid #ffe4a3;
-      border-radius:14px;
-      padding:10px 12px;
-      font-size:12px;
-      color:#9a4b00;
-      margin: 8px 0;
-    }
-
-    .grid2{
-      display:grid;
-      grid-template-columns: 1fr 1fr;
-      gap:10px;
-      align-items:end;
-    }
-
-    .modeHint{
-      border:1px dashed var(--line);
-      padding:10px 12px;
-      border-radius:14px;
-      font-size:12px;
-      color:var(--muted);
-      line-height:1.4;
-      margin:10px 0 0;
-    }
-
-    #btnCloseOverlay{
-      appearance:none;
-      background:#f6f6f6;
-      border:1px solid var(--line);
-      font-size:13px;
-      padding:8px 12px;
-      border-radius:12px;
-      cursor:pointer;
-    }
-
-    .modeToggle{
-      display:inline-flex;
-      align-items:center;
-      gap:6px;
-      background:#fff;
-      border:1px solid var(--line);
-      padding:6px 10px;
-      border-radius:12px;
-      font-size:12px;
-    }
-
-    .spinner{
-      width:14px;
-      height:14px;
-      border: 2px solid #ccc;
-      border-top-color:#111;
-      border-radius:999px;
-      animation: spin .8s linear infinite;
-    }
-    @keyframes spin{
-      to{ transform: rotate(360deg); }
-    }
-  </style>
-</head>
-<body>
-  <div class="app">
-    <header class="card">
-      <div class="row justifyBetween">
-        <div>
-          <h1>スクワット出席</h1>
-          <p class="muted mb6">みんなで毎日スクワット 10 回しよう</p>
-          <div class="row">
-            <div class="pill" id="statusPill">接続: 確認中...</div>
-            <div class="pill" id="modeIndicator">
-              <span>通信方式</span>
-              <span id="modeValue">安全</span>
-              <span class="spinner" id="modeSpinner" style="display:none"></span>
-            </div>
-          </div>
-        </div>
-        <div class="row" style="gap:6px">
-          <button class="btnGhost" type="button" id="btnReload">最新のデータを取得</button>
-          <select id="userSelect" disabled></select>
-        </div>
-      </div>
-      <div class="row mt8">
-        <div class="grow">
-          <div class="muted">選択中の月</div>
-          <div class="row justifyBetween">
-            <div class="row" style="gap:6px">
-              <span class="muted">（閲覧用）</span>
-              <strong id="monthLabelTop">----（Asia/Tokyo）</strong>
-            </div>
-            <div class="modeToggle">
-              <label for="modeCheckbox" class="row" style="gap:6px; align-items:center; cursor:pointer;">
-                <input type="checkbox" id="modeCheckbox" />
-                <span>手動URL入力モード</span>
-              </label>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div id="modeHint" class="modeHint" style="display:none;">
-        手動URL入力モード: GAS の URL を手動で入力できます。通常は変更不要です。
-      </div>
-    </header>
-
-    <div class="main">
-      <div class="card">
-        <div class="row">
-          <input type="password" id="pinLogin" inputmode="numeric" placeholder="参加用の PIN を入力" />
-          <button type="button" class="btnPrimary" id="btnLogin">入室</button>
-        </div>
-        <div class="muted" style="margin-top:4px;">または 新しく登録する</div>
-        <div class="grid2">
-          <div>
-            <input type="text" id="regName" placeholder="ニックネーム（表示名）" />
-          </div>
-          <div class="row">
-            <input type="password" id="pinReg" inputmode="numeric" placeholder="登録用の PIN を入力" />
-            <button type="button" class="btnPrimary" id="btnRegister">登録</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="row">
-          <div class="pill">
-            <span>今月の達成日数</span>
-            <strong id="kpiMonthCount">--</strong>
-          </div>
-          <div class="pill">
-            <span>連続日数</span>
-            <strong id="kpiStreak">--</strong>
-          </div>
-          <div class="pill">
-            <span>今日の状況</span>
-            <strong id="kpiToday">--</strong>
-          </div>
-        </div>
-      </div>
-
-      <div class="card calendarWrap">
-        <div class="calendarHeader">
-          <div class="navGroup">
-            <button class="navBtn" type="button" id="btnPrevMonth">←</button>
-            <button class="navBtn" type="button" id="btnNextMonth">→</button>
-          </div>
-          <div class="navLabel" id="monthLabel">----（Asia/Tokyo）</div>
-        </div>
-        <div class="calendar" id="calendar"></div>
-        <div class="legend">
-          <div class="legendItem">
-            <span class="legendSwatch done"></span>
-            <span>スクワット実施日</span>
-          </div>
-        </div>
-      </div>
-
-        <div class="bottomGrid">
-          <div class="miniCard">
-            <div class="label">ちな雲丹のデータ：今日の進捗</div>
-            <div class="value" id="modelValue">--</div>
-            <div class="sub" id="modelSub">--</div>
-          </div>
-          <div class="miniCard">
-            <div class="label">全体の継続率</div>
-            <div class="value" id="retValue">--</div>
-            <div class="sub" id="retSub">--</div>
-          </div>
-        </div>
-
-        <div class="row justifyBetween">
-          <div class="msg" id="msg">準備中です</div>
-
-          <button class="linkBtn" id="btnLogout" type="button">ログアウト</button>
-        </div>
-      </div>
-    </div>
-
-<script>
-/* ============================
-   設定
-============================ */
-
-// GAS WebアプリURL（API本体）
-const DEFAULT_GAS_API_URL =
-  "https://script.google.com/macros/s/AKfycby4QQfp5YjmPRN6MHRGckX0ruh96hZ8Dxsy8dTY_77zHOfNQS-EStILMmCx2TrV55-G_w/exec";
-const API_URL_STORAGE_KEY = "squat_app_api_url";
-let gasApiUrl = DEFAULT_GAS_API_URL;
-
-// 共有キーを使う場合（Code.gs の API_SHARED_KEY を設定した場合け）
-// const API_SHARED_KEY = "ここに同じキー";
-
-/* ============================
-   DOM
-============================ */
-const el = {
-  overlay: document.getElementById("overlay"),
-  toast: document.getElementById("toast"),
-  pinLogin: document.getElementById("pinLogin"),
-  pinReg: document.getElementById("pinReg"),
-  regName: document.getElementById("regName"),
-  btnLogin: document.getElementById("btnLogin"),
-  btnRegister: document.getElementById("btnRegister"),
-  btnCloseOverlay: document.getElementById("btnCloseOverlay"),
-
-  statusPill: document.getElementById("statusPill"),
-  userSelect: document.getElementById("userSelect"),
-  btnReload: document.getElementById("btnReload"),
-  btnCheckin: document.getElementById("btnCheckin"),
-
-  monthLabel: document.getElementById("monthLabel"),
-  monthLabelTop: document.getElementById("monthLabelTop"),
-  btnPrevMonth: document.getElementById("btnPrevMonth"),
-  btnNextMonth: document.getElementById("btnNextMonth"),
-  kpiMonthCount: document.getElementById("kpiMonthCount"),
-  kpiStreak: document.getElementById("kpiStreak"),
-  kpiToday: document.getElementById("kpiToday"),
-
-  calendar: document.getElementById("calendar"),
-
-  modelValue: document.getElementById("modelValue"),
-  modelSub: document.getElementById("modelSub"),
-  retValue: document.getElementById("retValue"),
-  retSub: document.getElementById("retSub"),
-
-  msg: document.getElementById("msg"),
-  btnLogout: document.getElementById("btnLogout"),
-  modeHint: document.getElementById("modeHint"),
-};
-
-/* ============================
-   ストレージ
-============================ */
-const storage = {
-  get(key) {
-    try {
-      return localStorage.getItem(key);
-    } catch (e) {
-      console.warn(e);
-      return null;
-    }
-  },
-  set(key, value) {
-    try {
-      localStorage.setItem(key, value);
-    } catch (e) {
-      console.warn(e);
-    }
-  },
-  remove(key) {
-    try {
-      localStorage.removeItem(key);
-    } catch (e) {
-      console.warn(e);
-    }
-  },
-};
-
-/* ============================
-   共通ユーティリティ
-============================ */
-const sleep = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function showToast(message) {
-  el.toast.textContent = message;
-  el.toast.classList.add("show");
-  setTimeout(() => {
-    el.toast.classList.remove("show");
-  }, 2500);
-}
-
-function showOverlay() {
-  el.overlay.classList.add("show");
-}
-function hideOverlay() {
-  el.overlay.classList.remove("show");
-}
-
-/* ============================
-   API 呼び出しラッパー
-============================ */
-const FETCH_TIMEOUT = 10 * 1000;
-
-function fetchWithTimeout(resource, options = {}) {
-  const { timeout = FETCH_TIMEOUT } = options;
-
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
-
-  return fetch(resource, {
-    ...options,
-    signal: controller.signal,
-  }).finally(() => clearTimeout(id));
-}
-
-function request(apiUrl, path, params = {}) {
-  const url = `${apiUrl}?${new URLSearchParams(params).toString()}`;
-  return fetchWithTimeout(url);
-}
-
-/* ============================
-   時刻・日付ヘルパー
-============================ */
-const JST_OFFSET = 9 * 60 * 60 * 1000;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-function nowJST() {
-  return new Date(Date.now() + JST_OFFSET);
-}
-function formatDateJST(date) {
-  return date.toISOString().slice(0, 10);
-}
-function getTodayJST() {
-  return formatDateJST(nowJST());
-}
-
-function startOfMonthJST(date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
-}
-function endOfMonthJST(date) {
-  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
-}
-
-function addMonths(date, count) {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() + count);
-  return d;
-}
-
-/* ============================
-   モード切り替え（安全/手動URL入力）
-============================ */
-let isManualMode = false;
-
-function updateModeUI() {
-  const mode = isManualMode ? "手動" : "安全";
-  el.modeValue.textContent = mode;
-  el.modeHint.style.display = isManualMode ? "block" : "none";
-}
-
-function toggleMode(manual) {
-  isManualMode = manual;
-  updateModeUI();
-  updateStatusPill("モード変更", isManualMode ? "手動URL入力" : "安全", "info");
-  renderStorageUrl();
-}
-
-function renderStorageUrl() {
-  const stored = storage.get(API_URL_STORAGE_KEY);
-  if (isManualMode && stored) {
-    gasApiUrl = stored;
-  } else {
-    gasApiUrl = DEFAULT_GAS_API_URL;
-  }
-  console.log("API URL:", gasApiUrl);
-}
-
-/* ============================
-   ユーザー状態
-============================ */
-let authUser = null;
-let attendanceData = [];
-let allUsers = [];
-let currentMonth = nowJST();
-
-/* ============================
-   UI 更新ヘルパー
-============================ */
-function updateStatusPill(label, value, type = "info") {
-  el.statusPill.innerHTML = `<span>${label}</span> <strong>${value}</strong>`;
-  const colorMap = {
-    ok: ["#E6FFFA", "#38B2AC", "#81E6D9"],
-    error: ["#FFF5F5", "#E53E3E", "#FEB2B2"],
-    info: ["#F7FAFC", "#2D3748", "#CBD5E0"],
-  };
-  const colors = colorMap[type] || colorMap.info;
-  el.statusPill.style.background = colors[0];
-  el.statusPill.style.color = colors[1];
-  el.statusPill.style.border = `1px solid ${colors[2]}`;
-}
-
-function setLoadingState(isLoading) {
-  el.btnLogin.disabled = isLoading;
-  el.btnRegister.disabled = isLoading;
-  el.btnCheckin.disabled = isLoading || !authUser;
-  el.btnReload.disabled = isLoading;
-  el.userSelect.disabled = isLoading || !authUser;
-}
-
-/* ============================
-   API 呼び出し
-============================ */
-async function login(pin) {
-  const res = await request(gasApiUrl, "", {
-    mode: "login",
-    pin,
-  });
-  return res.json();
-}
-
-async function register(pin, name) {
-  const res = await request(gasApiUrl, "", {
-    mode: "register",
-    pin,
-    name,
-  });
-  return res.json();
-}
-
-async function fetchAttendance(pin, month) {
-  const res = await request(gasApiUrl, "", {
-    mode: "getAttendance",
-    pin,
-    month,
-  });
-  return res.json();
-}
-
-async function checkin(pin, date) {
-  const res = await request(gasApiUrl, "", {
-    mode: "checkin",
-    pin,
-    date,
-  });
-  return res.json();
-}
-
-async function fetchDashboard() {
-  const res = await request(gasApiUrl, "", {
-    mode: "dashboard",
-  });
-  return res.json();
-}
-
-/* ============================
-   データ計算
-============================ */
-function calcStreak(attendance, today = getTodayJST()) {
-  let streak = 0;
-  let date = new Date(today);
-
-  while (attendance.includes(formatDateJST(date))) {
-    streak += 1;
-    date = new Date(date - MS_PER_DAY);
-  }
-  return streak;
-}
-
-/* ============================
-   カレンダー描画
-============================ */
-function renderCalendar(attendance, monthDate) {
-  const start = startOfMonthJST(monthDate);
-  const end = endOfMonthJST(monthDate);
-  const days = [];
-  const todayStr = getTodayJST();
-
-  for (let d = start; d <= end; d = new Date(d.getTime() + MS_PER_DAY)) {
-    days.push(new Date(d));
-  }
-
-  const container = el.calendar;
-  container.innerHTML = "";
-
-  const dowLabels = ["日","月","火","水","木","金","土"];
-  dowLabels.forEach((label) => {
-    const dowEl = document.createElement("div");
-    dowEl.className = "dow";
-    dowEl.textContent = label;
-    container.appendChild(dowEl);
-  });
-
-  // 1日目の曜日ずれ
-  for (let i = 0; i < days[0].getDay(); i++) {
-    const empty = document.createElement("div");
-    container.appendChild(empty);
-  }
-
-  days.forEach((day) => {
-    const elDay = document.createElement("div");
-    const dateStr = formatDateJST(day);
-    const isDone = attendance.includes(dateStr);
-    const isToday = dateStr === todayStr;
-
-    elDay.className = "day";
-    if (isDone) elDay.classList.add("done");
-    if (isToday) elDay.classList.add("today");
-    elDay.textContent = day.getDate();
-
-    container.appendChild(elDay);
-  });
-}
-
-/* ============================
-   UI 反映
-============================ */
-function updateKpi(attendance, monthDate) {
-  const monthStr = monthDate.toISOString().slice(0,7);
-
-  const monthCount = attendance.filter((d) => d.startsWith(monthStr)).length;
-  const streak = calcStreak(attendance);
-
-  const todayStr = getTodayJST();
-  const todayDone = attendance.includes(todayStr);
-
-  el.kpiMonthCount.textContent = `${monthCount} 日`;
-  el.kpiStreak.textContent = `${streak} 日`;
-  el.kpiToday.textContent = todayDone ? "完了！" : "未完了";
-
-  el.monthLabel.textContent = `${monthStr}（Asia/Tokyo）`;
-  el.monthLabelTop.textContent = `${monthStr}（Asia/Tokyo）`;
-}
-
-function updateModelDashboard(dashboard) {
-  const { modelToday, ret } = dashboard || {};
-
-  el.modelValue.textContent = modelToday?.status || "--";
-  el.modelSub.textContent = modelToday?.desc || "--";
-
-  el.retValue.textContent = ret?.today ?? "--";
-  el.retSub.textContent = ret?.desc ?? "--";
-}
-
-function populateUserSelect(users) {
-  el.userSelect.innerHTML = "";
-  users.forEach((u) => {
-    const option = document.createElement("option");
-    option.value = u.pin;
-    option.textContent = `${u.name}（PIN: ${u.pin}）`;
-    el.userSelect.appendChild(option);
-  });
-}
-
-function setAuthUser(user) {
-  authUser = user;
-  if (user) {
-    updateStatusPill("ログイン中", user.name, "ok");
-    el.userSelect.value = user.pin;
-    el.btnLogout.style.display = "inline-flex";
-    el.modeHint.textContent = "安全モード: デフォルトの GAS URL を使用しています";
-    el.modeHint.style.display = isManualMode ? "block" : "none";
-  } else {
-    updateStatusPill("未ログイン", "PIN を入力してください", "info");
-    el.btnLogout.style.display = "none";
-  }
-  el.btnCheckin.disabled = !authUser;
-  el.userSelect.disabled = !authUser;
-}
-
-function renderStorageReminder() {
-  const stored = storage.get(API_URL_STORAGE_KEY);
-  if (stored && stored !== DEFAULT_GAS_API_URL) {
-    updateStatusPill("手動URL使用中", "設定を確認してください", "info");
-    el.modeHint.style.display = "block";
-    el.modeHint.textContent = `現在、手動で設定された URL (${stored}) を利用中です。通常はリセットしてください。`;
-  }
-}
-
-/* ============================
-   イベントハンドラ
-============================ */
-async function handleLogin() {
-  const pin = el.pinLogin.value.trim();
-  if (!pin) {
-    showToast("PIN を入力してください");
-    return;
-  }
-  try {
-    setLoadingState(true);
-    const res = await login(pin);
-    if (res.status === "ok") {
-      authUser = { pin, name: res.name };
-      allUsers = res.users || [];
-      populateUserSelect(allUsers);
-      setAuthUser(authUser);
-      attendanceData = res.attendance || [];
-      renderCalendar(attendanceData, currentMonth);
-      updateKpi(attendanceData, currentMonth);
-      updateModelDashboard(res.dashboard);
-      el.msg.textContent = "データを更新しました";
-    } else {
-      showToast(res.message || "ログイン失敗");
-      updateStatusPill("エラー", "ログイン失敗", "error");
-    }
-  } catch (e) {
-    console.error(e);
-    showToast("接続エラー");
-    updateStatusPill("接続エラー", "ネットワークを確認", "error");
-  } finally {
-    setLoadingState(false);
-  }
-}
-
-async function handleRegister() {
-  const pin = el.pinReg.value.trim();
-  const name = el.regName.value.trim();
-  if (!pin || !name) {
-    showToast("名前と PIN を入力してください");
-    return;
-  }
-  try {
-    setLoadingState(true);
-    const res = await register(pin, name);
-    if (res.status === "ok") {
-      showToast("登録しました！ログインしてください");
-      allUsers = res.users || [];
-      populateUserSelect(allUsers);
-      el.pinLogin.value = pin;
-      el.regName.value = "";
-      el.pinReg.value = "";
-    } else {
-      showToast(res.message || "登録失敗");
-    }
-  } catch (e) {
-    console.error(e);
-    showToast("接続エラー");
-  } finally {
-    setLoadingState(false);
-  }
-}
-
-async function handleCheckin() {
-  if (!authUser) return;
-  const today = getTodayJST();
-  try {
-    setLoadingState(true);
-    const res = await checkin(authUser.pin, today);
-    if (res.status === "ok") {
-      showToast("チェックインしました！");
-      attendanceData = res.attendance || attendanceData;
-      renderCalendar(attendanceData, currentMonth);
-      updateKpi(attendanceData, currentMonth);
-      updateModelDashboard(res.dashboard);
-      el.msg.textContent = "更新しました";
-    } else {
-      showToast(res.message || "チェックイン失敗");
-    }
-  } catch (e) {
-    console.error(e);
-    showToast("接続エラー");
-  } finally {
-    setLoadingState(false);
-  }
-}
-
-async function handleReload() {
-  if (!authUser) {
-    showToast("先にログインしてください");
-    return;
-  }
-  try {
-    setLoadingState(true);
-    const res = await fetchAttendance(authUser.pin, currentMonth.toISOString().slice(0,7));
-    if (res.status === "ok") {
-      attendanceData = res.attendance || [];
-      renderCalendar(attendanceData, currentMonth);
-      updateKpi(attendanceData, currentMonth);
-      updateModelDashboard(res.dashboard);
-      el.msg.textContent = "最新データに更新しました";
-    } else {
-      showToast(res.message || "再取得失敗");
-    }
-  } catch (e) {
-    console.error(e);
-    showToast("接続エラー");
-  } finally {
-    setLoadingState(false);
-  }
-}
-
-function handleMonthNav(delta) {
-  currentMonth = addMonths(currentMonth, delta);
-  renderCalendar(attendanceData, currentMonth);
-  updateKpi(attendanceData, currentMonth);
-}
-
-function handleUserSelectChange() {
-  const pin = el.userSelect.value;
-  const user = allUsers.find((u) => u.pin === pin);
-  if (user) {
-    authUser = user;
-    setAuthUser(authUser);
-    handleReload();
-  }
-}
-
-function handleLogout() {
-  authUser = null;
-  attendanceData = [];
-  setAuthUser(null);
-  el.calendar.innerHTML = "";
-  el.msg.textContent = "ログアウトしました";
-}
-
-/* ============================
-   手動URL入力モードの制御
-============================ */
-function initModeToggle() {
-  updateModeUI();
-  renderStorageUrl();
-
-  el.modeCheckbox.addEventListener("change", (e) => {
-    toggleMode(e.target.checked);
-  });
-}
-
-/* ============================
-   起動
-============================ */
-function init() {
-  setAuthUser(null);
-  renderCalendar([], currentMonth);
-  updateKpi([], currentMonth);
-  updateStatusPill("接続確認中", "少々お待ちください", "info");
-
-  initModeToggle();
-  renderStorageReminder();
-
-  el.btnLogin.addEventListener("click", handleLogin);
-  el.btnRegister.addEventListener("click", handleRegister);
-  el.btnCheckin.addEventListener("click", handleCheckin);
-  el.btnReload.addEventListener("click", handleReload);
-
-  el.btnPrevMonth.addEventListener("click", () => handleMonthNav(-1));
-  el.btnNextMonth.addEventListener("click", () => handleMonthNav(1));
-
-  el.userSelect.addEventListener("change", handleUserSelectChange);
-  el.btnLogout.addEventListener("click", handleLogout);
-
-  el.btnCloseOverlay?.addEventListener("click", hideOverlay);
-}
-
-document.addEventListener("DOMContentLoaded", init);
-</script>
-
-<div class="toast" id="toast">toast</div>
-<div class="overlay" id="overlay">
-  <div class="modal">
-    <div class="modalHeader">
-      <h2>設定</h2>
-      <button id="btnCloseOverlay">閉じる</button>
-    </div>
-    <div class="modalBody">
-      <h3>GAS の URL を手動で変更する</h3>
-      <p class="desc">
-        通常は変更不要です。メンテナンス用に URL を切り替える必要がある場合のみ利用してください。
-      </p>
-      <input type="url" id="gasUrlInput" placeholder="https://script.google.com/macros/s/xxxxx/exec" />
-      <button type="button" class="btnPrimary mt10" id="btnSaveUrl">保存</button>
-      <small>保存すると手動モードで自動的に切り替わります。リセットするにはモードを安全に戻してください。</small>
-    </div>
-  </div>
-</div>
-</body>
-</html>
+    .overlay.s
