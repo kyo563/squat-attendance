@@ -120,6 +120,31 @@
       padding:10px;
       overflow:hidden;
     }
+    .calendarHeader{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      margin-bottom:8px;
+    }
+    .navGroup{ display:flex; gap:6px; align-items:center; }
+    .navBtn{
+      appearance:none;
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius: 12px;
+      padding: 8px 10px;
+      font-size:14px;
+      font-weight:700;
+      cursor:pointer;
+      min-width:44px;
+    }
+    .navBtn:disabled{
+      cursor:not-allowed;
+      color:#aaa;
+      background:#f7f7f7;
+    }
+    .navLabel{ font-size:13px; font-weight:700; }
     .calendar{
       display:grid;
       grid-template-columns: repeat(7, 1fr);
@@ -150,13 +175,19 @@
       color:#bbb;
     }
     .day.done{
-      background:#ffe8d1;
-      color:#8a4b0a;
-      border-color:#ffd4a3;
+      background:#ffead6;
+      color:#a04f00;
+      border-color:#ffcc99;
+      box-shadow: inset 0 0 0 1px #ffb566;
     }
     .day.today{
       outline:2px solid rgba(0,0,0,.25);
       outline-offset:1px;
+    }
+    .day.nodata{
+      background:#f2f2f2;
+      color:#999;
+      border-style:dashed;
     }
 
     .bottomGrid{
@@ -352,7 +383,7 @@
     <div class="card main">
       <div class="row justifyBetween">
         <div>
-          <div class="muted" id="monthLabel">----（Asia/Tokyo）</div>
+          <div class="muted" id="monthLabelTop">----（Asia/Tokyo）</div>
           <div class="value" style="font-size:16px;">今月の出席</div>
         </div>
         <div class="row" style="gap:6px; flex-wrap:wrap; justify-content:flex-end;">
@@ -363,6 +394,13 @@
       </div>
 
       <div class="calendarWrap">
+        <div class="calendarHeader">
+          <div class="navGroup">
+            <button class="navBtn" type="button" id="btnPrevMonth">←</button>
+            <button class="navBtn" type="button" id="btnNextMonth">→</button>
+          </div>
+          <div class="navLabel" id="monthLabel">----（Asia/Tokyo）</div>
+        </div>
         <div class="calendar" id="calendar"></div>
       </div>
 
@@ -420,6 +458,9 @@ const el = {
   btnCheckin: document.getElementById("btnCheckin"),
 
   monthLabel: document.getElementById("monthLabel"),
+  monthLabelTop: document.getElementById("monthLabelTop"),
+  btnPrevMonth: document.getElementById("btnPrevMonth"),
+  btnNextMonth: document.getElementById("btnNextMonth"),
   kpiMonthCount: document.getElementById("kpiMonthCount"),
   kpiStreak: document.getElementById("kpiStreak"),
   kpiToday: document.getElementById("kpiToday"),
@@ -568,6 +609,42 @@ async function callApi(action, args){
 /* ============================
    カレンダー描画（6週固定）
 ============================ */
+const GRAY_OUT_RANGE = {
+  start: "2025-12-01",
+  end: "2025-12-20",
+};
+const MIN_MONTH_OFFSET = -3;
+const MAX_MONTH_OFFSET = 3;
+
+function ymdToDate(dateStr){
+  const [yy, mm, dd] = String(dateStr || "").split("-").map(Number);
+  if(!yy || !mm || !dd) return null;
+  return new Date(Date.UTC(yy, mm - 1, dd));
+}
+const grayStartDate = ymdToDate(GRAY_OUT_RANGE.start);
+const grayEndDate = ymdToDate(GRAY_OUT_RANGE.end);
+
+function isWithinGrayRange(dateStr){
+  if(!grayStartDate || !grayEndDate) return false;
+  const d = ymdToDate(dateStr);
+  if(!d) return false;
+  return d.getTime() >= grayStartDate.getTime() && d.getTime() <= grayEndDate.getTime();
+}
+
+function addMonths(monthKey, offset){
+  const [yy, mm] = String(monthKey || "").split("-").map(Number);
+  if(!yy || !mm) return monthKey;
+  const d = new Date(Date.UTC(yy, mm - 1 + offset, 1));
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth() + 1;
+  return `${y}-${String(m).padStart(2,"0")}`;
+}
+
+function filterDatesByMonth(dates, monthKey){
+  const prefix = `${monthKey}-`;
+  return (dates || []).filter((d) => typeof d === "string" && d.startsWith(prefix));
+}
+
 function renderCalendar(monthKey, doneDates, todayYmd){
   const ym = String(monthKey || "1970-01").split("-");
   const y = Number(ym[0]);
@@ -604,7 +681,11 @@ function renderCalendar(monthKey, doneDates, todayYmd){
       cell.className = "day";
       cell.textContent = String(dayNum);
 
-      if(doneSet.has(dateStr)) cell.classList.add("done");
+      if(isWithinGrayRange(dateStr)){
+        cell.classList.add("nodata");
+      }else if(doneSet.has(dateStr)){
+        cell.classList.add("done");
+      }
       if(dateStr === todayYmd) cell.classList.add("today");
     }
     el.calendar.appendChild(cell);
@@ -628,17 +709,16 @@ function applyDashboard(d){
     el.btnCheckin.classList.remove("hidden");
   }
 
-  el.monthLabel.textContent = `${d.monthKey}（Asia/Tokyo）`;
+  baseMonthKey = d.monthKey;
+  todayYmd = d.today;
+  const dateList = Array.isArray(d.me?.allDoneDates) ? d.me.allDoneDates
+    : (Array.isArray(d.me?.monthDoneDates) ? d.me.monthDoneDates : []);
+  allDoneDates = Array.from(new Set(dateList));
+  currentMonthOffset = 0;
 
-  const monthCount = (d.me && typeof d.me.monthCount === "number")
-    ? d.me.monthCount
-    : (d.me.monthDoneDates ? d.me.monthDoneDates.length : 0);
-
-  el.kpiMonthCount.textContent = `自分：${monthCount}回`;
+  updateCalendarView();
   el.kpiStreak.textContent = `連続：${(d.me && d.me.streak != null) ? d.me.streak : "--"}日`;
   el.kpiToday.textContent = `今日：${(d.me && d.me.today && d.me.today.done) ? "達成" : "未達"}`;
-
-  renderCalendar(d.monthKey, (d.me && d.me.monthDoneDates) ? d.me.monthDoneDates : [], d.today);
 
   if(d.model && d.model.userId){
     const done = d.model.today && d.model.today.done;
@@ -663,6 +743,33 @@ function applyDashboard(d){
 ============================ */
 let token = "";
 let isCheckingIn = false;
+let baseMonthKey = "";
+let currentMonthOffset = 0;
+let allDoneDates = [];
+let todayYmd = "";
+
+function currentMonthKey(){
+  return addMonths(baseMonthKey, currentMonthOffset);
+}
+
+function updateCalendarView(){
+  if(!baseMonthKey){
+    el.monthLabel.textContent = "----（Asia/Tokyo）";
+    if(el.monthLabelTop) el.monthLabelTop.textContent = "----（Asia/Tokyo）";
+    el.btnPrevMonth.disabled = true;
+    el.btnNextMonth.disabled = true;
+    return;
+  }
+  const monthKey = currentMonthKey();
+  const monthDone = filterDatesByMonth(allDoneDates, monthKey);
+  renderCalendar(monthKey, monthDone, todayYmd);
+  const label = `${monthKey}（Asia/Tokyo）`;
+  el.monthLabel.textContent = label;
+  if(el.monthLabelTop) el.monthLabelTop.textContent = label;
+  el.kpiMonthCount.textContent = `自分：${monthDone.length}回`;
+  el.btnPrevMonth.disabled = currentMonthOffset <= MIN_MONTH_OFFSET;
+  el.btnNextMonth.disabled = currentMonthOffset >= MAX_MONTH_OFFSET;
+}
 
 async function refreshDashboard(note){
   if(!token){
@@ -796,6 +903,14 @@ el.btnCloseOverlay.addEventListener("click", () => showOverlay(false));
 el.btnReload.addEventListener("click", () => refreshDashboard("更新しました"));
 el.btnCheckin.addEventListener("click", doCheckin);
 el.btnLogout.addEventListener("click", logout);
+el.btnPrevMonth.addEventListener("click", () => {
+  currentMonthOffset = Math.max(MIN_MONTH_OFFSET, currentMonthOffset - 1);
+  updateCalendarView();
+});
+el.btnNextMonth.addEventListener("click", () => {
+  currentMonthOffset = Math.min(MAX_MONTH_OFFSET, currentMonthOffset + 1);
+  updateCalendarView();
+});
 
 el.pinLogin.addEventListener("keydown", (e) => {
   if(e.key === "Enter") doLogin();
