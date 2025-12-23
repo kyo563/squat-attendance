@@ -395,8 +395,10 @@
 ============================ */
 
 // GAS WebアプリURL（API本体）
-const GAS_API_URL =
+const DEFAULT_GAS_API_URL =
   "https://script.google.com/macros/s/AKfycbwx6D8jpFnDfsmBPRVRVLcVAXOR0fIVJNx6K_ywTVULAwNGn6SjvI29DeOSqs3gmda2bw/exec";
+const API_URL_STORAGE_KEY = "squat_app_api_url";
+let gasApiUrl = DEFAULT_GAS_API_URL;
 
 // 共有キーを使う場合（Code.gs の API_SHARED_KEY を設定した場合だけ）
 // const API_SHARED_KEY = "ここに同じキー";
@@ -436,8 +438,6 @@ const el = {
   modeHint: document.getElementById("modeHint"),
 };
 
-el.modeHint.textContent = "GitHub Pages運用（GAS Web API(JSONP)経由）です";
-
 /* ============================
    ストレージ
 ============================ */
@@ -451,6 +451,17 @@ function saveToken(t){
 }
 function clearToken(){
   try { localStorage.removeItem(STORAGE_KEY); } catch(e){}
+}
+
+function loadApiUrl(){
+  try {
+    return localStorage.getItem(API_URL_STORAGE_KEY) || "";
+  } catch(e){
+    return "";
+  }
+}
+function saveApiUrl(url){
+  try { localStorage.setItem(API_URL_STORAGE_KEY, url); } catch(e){}
 }
 
 /* ============================
@@ -474,10 +485,10 @@ function setMsg(text){
 /* ============================
    JSONP（CORS回避）
 ============================ */
-function jsonp_(params){
-  return new Promise((resolve, reject) => {
-    if(!GAS_API_URL) return reject(new Error("GAS_API_URL が未設定です"));
+async function jsonp_(params){
+  if(!gasApiUrl) throw new Error("GAS_API_URL が未設定です");
 
+  const runOnce = () => new Promise((resolve, reject) => {
     const cbName = "__cb_" + Date.now() + "_" + Math.random().toString(16).slice(2);
     const qs = new URLSearchParams(params);
 
@@ -488,14 +499,14 @@ function jsonp_(params){
     qs.set("_", String(Date.now()));
     qs.set("callback", cbName);
 
-    const url = GAS_API_URL + (GAS_API_URL.includes("?") ? "&" : "?") + qs.toString();
+    const url = gasApiUrl + (gasApiUrl.includes("?") ? "&" : "?") + qs.toString();
     const script = document.createElement("script");
     script.src = url;
     script.async = true;
 
     const timeout = setTimeout(() => {
       cleanup();
-      reject(new Error("APIタイムアウトです"));
+      reject(new Error(`APIタイムアウト: ${url}`));
     }, 15000);
 
     function cleanup(){
@@ -511,11 +522,23 @@ function jsonp_(params){
 
     script.onerror = () => {
       cleanup();
-      reject(new Error("API呼び出しに失敗しました（script load error）"));
+      reject(new Error(`API呼び出しに失敗しました: ${url}`));
     };
 
     document.head.appendChild(script);
   });
+
+  const attempts = 2;
+  let lastErr;
+  for(let i=0;i<attempts;i++){
+    try{
+      return await runOnce();
+    }catch(e){
+      lastErr = e;
+      if(i < attempts - 1) continue;
+    }
+  }
+  throw lastErr || new Error("API呼び出しに失敗しました");
 }
 
 async function callApi(action, args){
@@ -634,7 +657,7 @@ function applyDashboard(d){
   const a7 = Number(r.active7dRate || 0);
   const ma = Number(r.monthAvgRate || 0);
   el.retValue.textContent = `直近7日：${Math.round(a7 * 100)}%`;
-  el.retSub.textContent  = `今月平均：${Math.round(ma * 100)}%（延べ出席 / 延べ日数）`;
+  el.retSub.textContent  = `今月平均：${Math.round(ma * 100)}%（延べ出席 / 延べ日）`;
 }
 
 /* ============================
@@ -656,10 +679,15 @@ async function refreshDashboard(note){
     showOverlay(false);
     setMsg(note || "更新しました");
   }catch(e){
-    clearToken();
-    token = "";
-    showOverlay(true);
-    setMsg("セッション切れです");
+    const msg = e && e.message ? e.message : String(e);
+    if(/token/i.test(msg)){
+      clearToken();
+      token = "";
+      showOverlay(true);
+      setMsg("セッション切れです");
+    }else{
+      setMsg("通信に失敗しました。再試行してください");
+    }
     toast(e.message || String(e));
   }
 }
@@ -747,6 +775,19 @@ function logout(){
   setMsg("ログアウトしました");
 }
 
+function applyApiUrlFromQuery(){
+  const qs = new URLSearchParams(location.search);
+  const api = (qs.get("api") || "").trim();
+  if(api){
+    gasApiUrl = api;
+    saveApiUrl(api);
+  }else{
+    const saved = loadApiUrl();
+    gasApiUrl = saved || DEFAULT_GAS_API_URL;
+  }
+  el.modeHint.textContent = `GitHub Pages運用（${gasApiUrl}）`;
+}
+
 /* ============================
    イベント
 ============================ */
@@ -769,6 +810,7 @@ el.pinReg.addEventListener("keydown", (e) => {
    起動
 ============================ */
 (function boot(){
+  applyApiUrlFromQuery();
   token = loadToken();
   if(token){
     refreshDashboard("復帰しました");
