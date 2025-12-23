@@ -1,4 +1,3 @@
-// path: index.html
 <!doctype html>
 <html lang="ja">
 <head>
@@ -45,7 +44,11 @@
     }
 
     .row{ display:flex; gap:10px; align-items:center; }
+    .justifyBetween{ justify-content:space-between; }
     .grow{ flex:1; }
+    .mb6{ margin:0 0 6px; }
+    .mt10{ margin-top:10px; }
+    .mt8{ margin-top:8px; }
     h1{ margin:0; font-size:14px; letter-spacing:.2px; }
     .muted{ color:var(--muted); font-size:12px; }
 
@@ -98,12 +101,6 @@
       background:#fff; color:#111;
       border:1px solid var(--line);
       font-size:14px; font-weight:600;
-      padding: 10px 12px;
-    }
-    .btnDanger{
-      background:#fff; color:#a00;
-      border:1px solid #f1caca;
-      font-size:14px; font-weight:700;
       padding: 10px 12px;
     }
 
@@ -295,12 +292,12 @@
 
       <div class="row">
         <div class="grow">
-          <div class="muted" style="margin:0 0 6px;">表示名</div>
+          <div class="muted mb6">表示名</div>
           <input id="regName" maxlength="40" placeholder="ユーザー名（例：ちな雲丹）" />
         </div>
       </div>
 
-      <div class="pinRow" style="margin-top:10px;">
+      <div class="pinRow mt10">
         <input
           id="pinReg"
           class="pinInput"
@@ -313,11 +310,11 @@
         <button class="btnGhost" id="btnRegister" style="flex:0 0 120px;">登録</button>
       </div>
 
-      <div class="row" style="margin-top:10px;">
+      <div class="row mt10">
         <button class="btnGhost" id="btnCloseOverlay">閉じる</button>
       </div>
 
-      <div class="msg" style="margin-top:8px;">
+      <div class="msg mt8">
         <span id="modeHint"></span>
       </div>
     </div>
@@ -327,21 +324,21 @@
   <div class="app">
     <!-- 上部：ユーザー呼び出し -->
     <div class="card">
-      <div class="row" style="justify-content:space-between;">
+      <div class="row justifyBetween">
         <h1>スクワット出席（20回）</h1>
         <span class="pill" id="statusPill">状態：未記帳</span>
       </div>
 
-      <div class="row" style="margin-top:10px;">
+      <div class="row mt10">
         <div class="grow">
-          <div class="muted" style="margin:0 0 6px;">ユーザー呼び出し</div>
+          <div class="muted mb6">ユーザー呼び出し</div>
           <select id="userSelect" disabled>
             <option>未ログイン</option>
           </select>
         </div>
 
         <div style="width:92px;">
-          <div class="muted" style="margin:0 0 6px;">更新</div>
+          <div class="muted mb6">更新</div>
           <button class="btnGhost" type="button" id="btnReload">更新</button>
         </div>
       </div>
@@ -352,7 +349,7 @@
 
     <!-- 下部：カレンダー＋KPI -->
     <div class="card main">
-      <div class="row" style="justify-content:space-between;">
+      <div class="row justifyBetween">
         <div>
           <div class="muted" id="monthLabel">----（Asia/Tokyo）</div>
           <div class="value" style="font-size:16px;">今月の出席</div>
@@ -381,7 +378,7 @@
         </div>
       </div>
 
-      <div class="row" style="justify-content:space-between;">
+      <div class="row justifyBetween">
         <div class="msg" id="msg">準備中です</div>
 
         <button class="linkBtn" id="btnLogout" type="button">ログアウト</button>
