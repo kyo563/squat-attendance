@@ -10,7 +10,15 @@ const TIMEZONE = "Asia/Tokyo";
 const DATE_FORMAT = "yyyy-MM-dd";
 
 function doGet(e) {
-  const params = e?.parameter || {};
+  return api_(e);
+}
+
+function doPost(e) {
+  return api_(e);
+}
+
+function api_(e) {
+  const params = mergeParams_(e);
   const callback = params.callback || "";
 
   try {
@@ -45,10 +53,24 @@ function doGet(e) {
   }
 }
 
+function mergeParams_(e) {
+  const params = Object.assign({}, e?.parameter || {});
+  const postData = e?.postData;
+  if (postData?.contents && /^application\/json/.test(String(postData.type || ""))) {
+    try {
+      const body = JSON.parse(postData.contents);
+      Object.keys(body || {}).forEach((k) => {
+        if (params[k] == null) params[k] = body[k];
+      });
+    } catch (_ignore) {}
+  }
+  return params;
+}
+
 function resolveAction(params) {
   if (params.action) return String(params.action);
 
-  const mode = String(params.mode || "");
+  const mode = String(params.mode || "").trim();
   switch (mode) {
     case "register":
       return "registerUser";
@@ -90,14 +112,15 @@ function handleLogin(store, params) {
   }
 
   const token = createSessionToken();
-  store.upsertSession(user.userId, token, getSessionExpireDate());
+  const expiresAtDate = getSessionExpireDate();
+  store.upsertSession(user.userId, token, expiresAtDate);
 
   return {
     ok: true,
     token,
     name: user.name,
     userId: user.userId,
-    expiresAt: dateTimeString(getSessionExpireDate()),
+    expiresAt: dateTimeString(expiresAtDate),
   };
 }
 
@@ -180,7 +203,8 @@ function handleCheckin(store, params) {
   const me = requireUserFromToken(params.token, store);
   if (!me.ok) return me;
 
-  const reps = 30;
+  const reps = normalizeReps(params.reps);
+  if (!reps) return fail("invalid_reps", "reps は1〜999の数値で指定してください。");
 
   const today = normalizeDate(new Date());
   const lock = LockService.getScriptLock();
@@ -407,7 +431,7 @@ class DataStore {
     if (!targetToken) return;
 
     const now = nowString();
-    const expiresAt = dateTimeString(expiresAtDate);
+    const expiresAt = toIsoString_(expiresAtDate);
     const all = this.sessions.getDataRange().getValues();
 
     for (let i = 1; i < all.length; i++) {
@@ -434,8 +458,8 @@ class DataStore {
 
       const userId = normalizeUserId(row[1]);
       const expiresAtRaw = String(row[2] || "").trim();
-      const expiresAt = new Date(expiresAtRaw);
-      if (!userId || !expiresAtRaw || isNaN(expiresAt.getTime())) return null;
+      const expiresAt = parseDateTime_(expiresAtRaw);
+      if (!userId || !expiresAtRaw || !expiresAt) return null;
 
       return {
         token: targetToken,
@@ -479,7 +503,17 @@ function normalizeUserId(value) {
 
 function normalizeDate(value) {
   const date = value instanceof Date ? value : new Date(value);
+  if (!(date instanceof Date) || isNaN(date.getTime())) {
+    throw new Error("日付の解釈に失敗しました。");
+  }
   return Utilities.formatDate(date, TIMEZONE, DATE_FORMAT);
+}
+
+function normalizeReps(value) {
+  if (value == null || value === "") return 30;
+  const num = Number(value);
+  if (!isFinite(num) || num < 1 || num > 999) return 0;
+  return Math.floor(num);
 }
 
 function pad2(n) {
@@ -492,6 +526,25 @@ function nowString() {
 
 function dateTimeString(date) {
   return Utilities.formatDate(date, TIMEZONE, "yyyy-MM-dd HH:mm:ss");
+}
+
+function toIsoString_(date) {
+  return new Date(date).toISOString();
+}
+
+function parseDateTime_(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+
+  const isoParsed = new Date(raw);
+  if (!isNaN(isoParsed.getTime())) return isoParsed;
+
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/);
+  if (!m) return null;
+
+  const jstMillis = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]) - 9, Number(m[5]), Number(m[6]));
+  const parsed = new Date(jstMillis);
+  return isNaN(parsed.getTime()) ? null : parsed;
 }
 
 function getSessionExpireDate() {
