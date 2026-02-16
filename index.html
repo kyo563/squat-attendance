@@ -174,7 +174,6 @@
       border-radius: 12px;
       border:1px solid var(--line);
       display:flex;
-      flex-direction:column;
       align-items:center;
       justify-content:center;
       font-size:12px;
@@ -182,21 +181,8 @@
       color:#111;
       position:relative;
       overflow:hidden;
-      gap:2px;
       line-height:1;
     }
-    .dayNum{
-      font-weight:700;
-      line-height:1;
-    }
-    .holidayLabel{
-      font-size:9px;
-      color:#9a7b00;
-      line-height:1;
-      font-weight:700;
-      display:none;
-    }
-    .day.holiday .holidayLabel{ display:block; }
     .day.off{
       background:#f6f6f6;
       color:#bbb;
@@ -216,18 +202,40 @@
       background:#fffbe8;
       border-color:#ffefb0;
       color:#7a6200;
+      align-items:flex-start;
+      justify-content:flex-start;
+      padding: 4px 4px 14px;
+      font-weight:700;
+    }
+    .day.holiday::after{
+      content:"祝日";
+      position:absolute;
+      left:0;
+      right:0;
+      bottom:2px;
+      text-align:center;
+      font-size:9px;
+      line-height:1;
+      color:#9a7b00;
+      font-weight:700;
     }
     .day.done{
-      box-shadow: inset 0 0 0 2px #ffb347;
-    }
-    .day.done::after{
-      content:"✓";
-      position:absolute;
-      top:3px;
-      right:5px;
-      font-size:10px;
+      background:#fff1e1;
       color:#9a4b00;
-      font-weight:900;
+      border-color:#ffcc99;
+      box-shadow: inset 0 0 0 1px #ffc488;
+    }
+    .day.sat.done{
+      background:#f2f8ff;
+      color:#1f4f8b;
+    }
+    .day.sun.done{
+      background:#fff3f3;
+      color:#8b2c2c;
+    }
+    .day.holiday.done{
+      background:#fffbe8;
+      color:#7a6200;
     }
     .day.today{
       outline:2px solid rgba(0,0,0,.25);
@@ -923,15 +931,7 @@ function renderCalendar(monthKey, doneDates, todayStr) {
     if (doneSet.has(dateStr)) dayEl.classList.add("done");
     if (todayStr && dateStr === todayStr) dayEl.classList.add("today");
 
-    const dayNum = document.createElement("div");
-    dayNum.className = "dayNum";
-    dayNum.textContent = String(d);
-    dayEl.appendChild(dayNum);
-
-    const holidayLabel = document.createElement("div");
-    holidayLabel.className = "holidayLabel";
-    holidayLabel.textContent = "祝日";
-    dayEl.appendChild(holidayLabel);
+    dayEl.textContent = String(d);
 
     container.appendChild(dayEl);
   }
