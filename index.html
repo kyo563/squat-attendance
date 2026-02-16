@@ -675,7 +675,6 @@ const DEFAULT_GAS_API_URL =
 const API_URL_STORAGE_KEY = "squat_app_api_url";
 const TOKEN_STORAGE_KEY   = "squat_app_token";
 const NAME_STORAGE_KEY    = "squat_app_name";
-const TEMP_MODEL_USER_ID  = "AAA"; // 雲丹ユーザー登録までの仮設定。登録後に更新してください。
 
 // 手動URLが有効な場合に使うAPI URL
 let gasApiUrl = DEFAULT_GAS_API_URL;
@@ -1052,7 +1051,7 @@ function updateKpisFromDashboard(dash) {
     el.modelSub.textContent = (md === true && mts) ? `時刻: ${mts}` : `model_user_id: ${model.userId}`;
   } else {
     el.modelValue.textContent = "--";
-    el.modelSub.textContent = `仮設定中: model_user_id = ${TEMP_MODEL_USER_ID}（後で更新可）`;
+    el.modelSub.textContent = "model_user_id が未設定です（GAS側の MODEL_USER_ID を設定してください）";
   }
 
   // 継続率
@@ -1080,6 +1079,9 @@ async function apiRegister(userId, password) {
 }
 async function apiDashboard(token) {
   return requestJsonp({ action: "getDashboard", token });
+}
+async function apiLogout(token) {
+  return requestJsonp({ action: "logout", token });
 }
 async function apiAttendance(token, monthKey) {
   return requestJsonp({ action: "getAttendance", token, month: monthKey });
@@ -1246,7 +1248,17 @@ async function handleCheckin() {
   }
 }
 
-function handleLogout() {
+async function handleLogout() {
+  const token = auth.token;
+
+  if (token) {
+    try {
+      await apiLogout(token);
+    } catch (e) {
+      console.warn("logout API の呼び出しに失敗しました:", e);
+    }
+  }
+
   clearAuth();
   currentMonthKey = "";
   todayKey = "";
