@@ -1,6 +1,6 @@
 const SPREADSHEET_ID = "{{SPREADSHEET_ID}}"; // スクリプト プロパティ `SPREADSHEET_ID` を優先
-const API_SHARED_KEY = ""; // 利用する場合のみ値を入れ、クライアントは key パラメーターを付与
-const MODEL_USER_ID = ""; // 任意: ダッシュボード下部のモデルユーザー表示用
+const API_SHARED_KEY = ""; // 利用する場合のみ値を入れる
+const MODEL_USER_ID = ""; // 任意: ダッシュボード表示用
 const SESSION_EXPIRES_DAYS = 7;
 
 const SHEET_USERS = "Users";
@@ -10,60 +10,124 @@ const TIMEZONE = "Asia/Tokyo";
 const DATE_FORMAT = "yyyy-MM-dd";
 
 function doGet(e) {
-  const params = e?.parameter || {};
+  return api_(e);
+}
+
+function doPost(e) {
+  return api_(e);
+}
+
+function api_(e) {
+  const params = mergeParams_(e);
   const callback = params.callback || "";
 
   try {
-    if (API_SHARED_KEY && params.key !== API_SHARED_KEY) {
-      return response({ ok: false, error: "unauthorized", message: "共有キーが正しくありません。" }, callback);
+    if (!isAuthorized_(params)) {
+      return response(decorate_({ ok: false, error: "unauthorized", message: "共有キーが正しくありません。" }), callback);
     }
 
     const action = resolveAction(params);
     const store = new DataStore();
 
+    let result;
     switch (action) {
       case "health":
-        return response(handleHealth(), callback);
-      case "login":
-        return response(handleLogin(store, params), callback);
-      case "logout":
-        return response(handleLogout(store, params), callback);
+        result = handleHealth();
+        break;
       case "registerUser":
-        return response(handleRegister(store, params), callback);
+        result = handleRegister(store, params);
+        break;
+      case "login":
+        result = handleLogin(store, params);
+        break;
+      case "loginBundle":
+        result = handleLoginBundle(store, params);
+        break;
+      case "logout":
+        result = handleLogout(store, params);
+        break;
       case "getDashboard":
-        return response(handleDashboard(store, params), callback);
+        result = handleDashboard(store, params);
+        break;
       case "getAttendance":
-        return response(handleGetAttendance(store, params), callback);
+        result = handleGetAttendance(store, params);
+        break;
       case "checkin":
-        return response(handleCheckin(store, params), callback);
+        result = handleCheckin(store, params);
+        break;
+      case "checkinBundle":
+        result = handleCheckinBundle(store, params);
+        break;
       default:
-        return response({ ok: false, error: "unknown_action", message: `action=${action} は未対応です` }, callback);
+        result = fail("unknown_action", `action=${action} は未対応です`);
+        break;
     }
+
+    return response(decorate_(result), callback);
   } catch (error) {
     console.error(error);
-    return response({ ok: false, error: "server_error", message: error.message || "サーバーエラーが発生しました" }, callback);
+    return response(decorate_({ ok: false, error: "server_error", message: error.message || "サーバーエラーが発生しました" }), callback);
   }
+}
+
+function mergeParams_(e) {
+  const params = Object.assign({}, e?.parameter || {});
+  const postData = e?.postData;
+  if (postData?.contents && /^application\/json/.test(String(postData.type || ""))) {
+    try {
+      const body = JSON.parse(postData.contents);
+      Object.keys(body).forEach((k) => {
+        if (params[k] == null) params[k] = body[k];
+      });
+    } catch (_ignore) {}
+  }
+
+  // 旧仕様互換パラメータ
+  if (params.pin4 == null && params.pin != null) params.pin4 = params.pin;
+  if (params.displayName == null && params.name != null) params.displayName = params.name;
+
+  return params;
+}
+
+function isAuthorized_(params) {
+  if (!API_SHARED_KEY) return true;
+  const key = String(params.key || params.k || "");
+  return key === API_SHARED_KEY;
 }
 
 function resolveAction(params) {
   if (params.action) return String(params.action);
 
-  const mode = String(params.mode || "");
+  const mode = String(params.mode || "").trim();
   switch (mode) {
     case "register":
       return "registerUser";
     case "dashboard":
       return "getDashboard";
     case "login":
+      return "loginBundle";
+    case "checkin":
+      return "checkinBundle";
+    case "health":
     case "logout":
     case "getAttendance":
-    case "checkin":
       return mode;
     default:
       return "health";
   }
 }
 
+function decorate_(obj) {
+  const out = obj || {};
+  if (out.status == null) out.status = out.ok ? "ok" : "ng";
+  if (out.ok && out.message == null) out.message = "ok";
+  if (!out.ok && out.message == null && out.error != null) out.message = String(out.error);
+  return out;
+}
+
+/* ============================
+   Handlers
+============================ */
 function handleHealth() {
   return {
     ok: true,
@@ -73,31 +137,105 @@ function handleHealth() {
   };
 }
 
+function handleRegister(store, params) {
+  const userIdInput = normalizeUserId(params.userId);
+  const passwordInput = normalizePin4(params.password);
+
+  // 現行仕様: userId + password
+  if (userIdInput && passwordInput) {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(30 * 1000);
+    try {
+      if (store.findUser(userIdInput)) {
+        return fail("already_exists", "同じ userId のユーザーが登録済みです。");
+      }
+      const passwordSalt = generateSalt();
+      const passwordHash = hashPassword(passwordInput, passwordSalt);
+      store.addUser({ userId: userIdInput, name: userIdInput, passwordSalt, passwordHash });
+      return { ok: true, userId: userIdInput, name: userIdInput, message: "登録しました" };
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  // 旧仕様互換: displayName + pin4
+  const displayName = String(params.displayName || "").trim();
+  const pin4 = normalizePin4(params.pin4);
+  if (!displayName) return fail("missing_display_name", "displayName（または name）は必須です。");
+  if (!pin4) return fail("weak_password", "pin4 は4桁の数字にしてください。");
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30 * 1000);
+  try {
+    if (store.findUserByPin4(pin4)) {
+      return fail("pin_dup", "そのPINは既に使用されています。別のPINにしてください。");
+    }
+    const userId = `u_${Utilities.getUuid().replace(/-/g, "").slice(0, 12)}`;
+    const passwordSalt = generateSalt();
+    const passwordHash = hashPassword(pin4, passwordSalt);
+    store.addUser({ userId, name: displayName, passwordSalt, passwordHash });
+    return { ok: true, userId, name: displayName, message: "登録しました" };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function handleLogin(store, params) {
   const userId = normalizeUserId(params.userId);
-  const password = String(params.password || "");
+  const password = normalizePin4(params.password);
 
-  if (!userId) return fail("missing_user_id", "userId は必須です。");
-  if (!password) return fail("missing_password", "password は必須です。");
-  if (!/^\d{4}$/.test(password)) {
-    return fail("weak_password", "password は4桁の数字にしてください。");
+  // 現行仕様ログイン
+  if (userId && password) {
+    const user = store.findUser(userId);
+    if (!user) return fail("user_not_found", "ユーザーが存在しません。");
+    if (!verifyPassword(password, user.passwordSalt, user.passwordHash)) {
+      return fail("invalid_credentials", "userId または password が正しくありません。");
+    }
+
+    const token = createSessionToken();
+    store.upsertSession(user.userId, token, getSessionExpireDate());
+
+    return {
+      ok: true,
+      token,
+      name: user.name,
+      userId: user.userId,
+      expiresAt: dateTimeString(getSessionExpireDate()),
+    };
   }
 
-  const user = store.findUser(userId);
-  if (!user) return fail("user_not_found", "ユーザーが存在しません。");
-  if (!verifyPassword(password, user.passwordSalt, user.passwordHash)) {
-    return fail("invalid_credentials", "userId または password が正しくありません。");
-  }
+  // 旧仕様ログイン: pin4 のみ
+  const pin4 = normalizePin4(params.pin4);
+  if (!pin4) return fail("missing_credentials", "userId/password または pin4 を指定してください。");
+
+  const legacyUser = store.findUserByPin4(pin4);
+  if (!legacyUser) return fail("not_found", "PINが見つかりません。");
 
   const token = createSessionToken();
-  store.upsertSession(user.userId, token, getSessionExpireDate());
+  store.upsertSession(legacyUser.userId, token, getSessionExpireDate());
 
   return {
     ok: true,
     token,
-    name: user.name,
-    userId: user.userId,
+    name: legacyUser.name,
+    userId: legacyUser.userId,
     expiresAt: dateTimeString(getSessionExpireDate()),
+  };
+}
+
+function handleLoginBundle(store, params) {
+  const login = handleLogin(store, params);
+  if (!login.ok) return login;
+
+  const dashboard = handleDashboard(store, { token: login.token });
+  if (!dashboard.ok) return dashboard;
+
+  return {
+    ok: true,
+    token: login.token,
+    userId: login.userId,
+    name: login.name,
+    dashboard,
   };
 }
 
@@ -109,39 +247,11 @@ function handleLogout(store, params) {
   return { ok: true, message: "ログアウトしました" };
 }
 
-function handleRegister(store, params) {
-  const userId = normalizeUserId(params.userId);
-  const password = String(params.password || "");
-
-  if (!userId) return fail("missing_user_id", "userId は必須です（英数字・-_、3〜32文字）。");
-  if (!/^\d{4}$/.test(password)) {
-    return fail("weak_password", "password は4桁の数字にしてください。");
-  }
-
-  const lock = LockService.getScriptLock();
-  lock.waitLock(30 * 1000);
-  try {
-    if (store.findUser(userId)) {
-      return fail("already_exists", "同じ userId のユーザーが登録済みです。");
-    }
-
-    const passwordSalt = generateSalt();
-    const passwordHash = hashPassword(password, passwordSalt);
-
-    store.addUser({ userId, name: userId, passwordSalt, passwordHash });
-    return {
-      ok: true,
-      message: "登録しました",
-    };
-  } finally {
-    lock.releaseLock();
-  }
-}
-
 function handleDashboard(store, params) {
-  const me = requireUserFromToken(params.token, store);
-  if (!me.ok) return me;
+  const tokenResult = resolveTokenAndUser_(store, params);
+  if (!tokenResult.ok) return tokenResult;
 
+  const userId = tokenResult.userId;
   const today = normalizeDate(new Date());
   const monthKey = today.slice(0, 7);
 
@@ -149,199 +259,242 @@ function handleDashboard(store, params) {
     ok: true,
     today,
     monthKey,
-    me: buildMeMetrics(store, me.userId, today, monthKey),
+    me: buildMeMetrics(store, userId, today, monthKey),
     model: buildModelMetrics(store, today),
     retention: buildRetentionMetrics(store, today, monthKey),
   };
 }
 
 function handleGetAttendance(store, params) {
-  const me = requireUserFromToken(params.token, store);
-  if (!me.ok) return me;
+  const tokenResult = resolveTokenAndUser_(store, params);
+  if (!tokenResult.ok) return tokenResult;
 
-  const monthKey = String(params.month || "").match(/^\d{4}-\d{2}$/)
+  const monthKey = /^\d{4}-\d{2}$/.test(String(params.month || ""))
     ? String(params.month)
     : normalizeDate(new Date()).slice(0, 7);
 
-  const monthDoneDates = store
-    .getAttendanceEntriesForUserId(me.userId)
+  const today = normalizeDate(new Date());
+  const entries = store.getAttendanceEntriesForUserId(tokenResult.userId);
+
+  const monthDoneDates = entries
     .map((e) => e.date)
     .filter((date) => date.indexOf(monthKey) === 0)
     .sort();
 
+  const doneMap = {};
+  entries.forEach((e) => {
+    doneMap[e.date] = true;
+  });
+
   return {
     ok: true,
+    today,
     monthKey,
+    todayStatus: {
+      done: !!doneMap[today],
+      timestamp: "",
+    },
     monthDoneDates,
+    monthCount: monthDoneDates.length,
+    streak: calcStreakFromMap_(doneMap, today),
   };
 }
 
 function handleCheckin(store, params) {
-  const me = requireUserFromToken(params.token, store);
-  if (!me.ok) return me;
+  const tokenResult = resolveTokenAndUser_(store, params);
+  if (!tokenResult.ok) return tokenResult;
 
-  const reps = 30;
+  const reps = normalizeReps(params.reps);
+  if (!reps) return fail("invalid_reps", "reps は1〜999の数値にしてください。");
 
   const today = normalizeDate(new Date());
   const lock = LockService.getScriptLock();
   lock.waitLock(30 * 1000);
   try {
-    store.recordAttendance(me.userId, today, reps);
+    store.recordAttendance(tokenResult.userId, today, reps);
   } finally {
     lock.releaseLock();
   }
 
+  const me = store.findUser(tokenResult.userId);
   return {
     ok: true,
-    message: "チェックインしました",
     date: today,
+    name: me ? me.name : tokenResult.userId,
+    reps,
+    message: "チェックインを記録しました",
   };
 }
 
-function requireUserFromToken(token, store) {
-  const value = String(token || "").trim();
-  if (!value) return fail("auth_required", "未ログインです。再ログインしてください。");
+function handleCheckinBundle(store, params) {
+  const checkin = handleCheckin(store, params);
+  if (!checkin.ok) return checkin;
 
-  const session = store.findSession(value);
-  if (!session) return fail("auth_required", "未ログインです。再ログインしてください。");
+  const tokenResult = resolveTokenAndUser_(store, params);
+  if (!tokenResult.ok) return tokenResult;
 
-  const now = new Date();
-  if (session.expiresAt.getTime() <= now.getTime()) {
-    store.deleteSession(value);
-    return fail("session_expired", "セッション有効期限が切れました。再ログインしてください。");
-  }
-
-  const user = store.findUser(session.userId);
-  if (!user) {
-    store.deleteSession(value);
-    return fail("session_expired", "セッション切れです。再ログインしてください。");
-  }
-
-  return { ok: true, userId: user.userId };
-}
-
-function buildMeMetrics(store, userId, today, monthKey) {
-  const entries = store.getAttendanceEntriesForUserId(userId);
-  const doneDates = entries.map((e) => e.date);
-  const doneSet = new Set(doneDates);
-
-  const monthCount = doneDates.filter((d) => d.indexOf(monthKey) === 0).length;
-  const todayDoneEntry = entries.find((e) => e.date === today) || null;
+  const dashboard = handleDashboard(store, { token: tokenResult.token });
+  if (!dashboard.ok) return dashboard;
 
   return {
-    monthCount,
-    streak: calcStreak(doneSet, today),
+    ok: true,
+    checkin,
+    dashboard,
+  };
+}
+
+function resolveTokenAndUser_(store, params) {
+  const directToken = String(params.token || "").trim();
+  if (directToken) {
+    const user = requireUserFromToken(directToken, store);
+    if (!user.ok) return user;
+    return { ok: true, token: directToken, userId: user.userId };
+  }
+
+  const login = handleLogin(store, params);
+  if (!login.ok) return login;
+  return { ok: true, token: login.token, userId: login.userId };
+}
+
+/* ============================
+   Metrics
+============================ */
+function buildMeMetrics(store, userId, today, monthKey) {
+  const entries = store.getAttendanceEntriesForUserId(userId);
+  const doneDates = entries.map((e) => e.date).sort();
+  const monthDoneDates = doneDates.filter((d) => d.indexOf(monthKey) === 0);
+
+  const doneMap = {};
+  doneDates.forEach((d) => {
+    doneMap[d] = true;
+  });
+
+  return {
+    userId,
+    name: store.findUser(userId)?.name || userId,
     today: {
-      done: !!todayDoneEntry,
-      timestamp: todayDoneEntry ? todayDoneEntry.createdAt : "",
+      done: !!doneMap[today],
+      timestamp: "",
     },
+    monthDoneDates,
+    allDoneDates: doneDates,
+    monthCount: monthDoneDates.length,
+    streak: calcStreakFromMap_(doneMap, today),
   };
 }
 
 function buildModelMetrics(store, today) {
-  const modelUserId = normalizeUserId(MODEL_USER_ID);
-  if (!modelUserId) return { userId: null, today: { done: null, timestamp: "" } };
+  const modelId = normalizeUserId(MODEL_USER_ID);
+  if (!modelId) {
+    return {
+      userId: "",
+      today: { done: false, timestamp: "" },
+    };
+  }
 
-  const user = store.findUser(modelUserId);
-  if (!user) return { userId: modelUserId, today: { done: null, timestamp: "" } };
+  const entries = store.getAttendanceEntriesForUserId(modelId);
+  const doneToday = entries.some((e) => e.date === today);
 
-  const todayEntry = store.getAttendanceEntriesForUserId(modelUserId).find((e) => e.date === today) || null;
   return {
-    userId: modelUserId,
-    today: {
-      done: !!todayEntry,
-      timestamp: todayEntry ? todayEntry.createdAt : "",
-    },
+    userId: modelId,
+    today: { done: doneToday, timestamp: "" },
   };
 }
 
 function buildRetentionMetrics(store, today, monthKey) {
   const users = store.listUsers();
   const totalUsers = users.length;
-  if (totalUsers === 0) {
-    return {
-      totalUsers: 0,
-      active7Users: 0,
-      active7dRate: 0,
-      monthAvgRate: 0,
-    };
-  }
 
-  const activeUserIds = new Set();
-  const monthDailyCount = {};
-  const monthDayLimit = Number(today.slice(8, 10));
+  const todayDate = parseDateYmd_(today);
+  const start7 = new Date(todayDate.getTime());
+  start7.setDate(start7.getDate() - 6);
+  const start7Str = normalizeDate(start7);
 
-  users.forEach((u) => {
-    const entries = store.getAttendanceEntriesForUserId(u.userId);
-    let active7 = false;
+  const allAttendance = store.getAllAttendanceEntries();
 
-    entries.forEach((entry) => {
-      if (isWithinLastDays(entry.date, today, 7)) active7 = true;
-      if (entry.date.indexOf(monthKey) === 0) {
-        monthDailyCount[entry.date] = (monthDailyCount[entry.date] || 0) + 1;
-      }
-    });
+  const active7Set = {};
+  let monthAttend = 0;
 
-    if (active7) activeUserIds.add(u.userId);
+  allAttendance.forEach((entry) => {
+    if (entry.date >= start7Str && entry.date <= today) active7Set[entry.userId] = true;
+    if (entry.date.indexOf(monthKey) === 0) monthAttend++;
   });
 
-  let monthRateSum = 0;
-  for (let d = 1; d <= monthDayLimit; d++) {
-    const key = `${monthKey}-${pad2(d)}`;
-    monthRateSum += (monthDailyCount[key] || 0) / totalUsers;
-  }
+  const active7Users = Object.keys(active7Set).length;
+  const active7dRate = totalUsers > 0 ? active7Users / totalUsers : 0;
+
+  const y = Number(monthKey.slice(0, 4));
+  const m = Number(monthKey.slice(5, 7));
+  const monthStart = new Date(y, m - 1, 1);
+  const daysElapsed = Math.max(1, Math.floor((todayDate.getTime() - monthStart.getTime()) / 86400000) + 1);
+  const denom = totalUsers * daysElapsed;
+  const monthAvgRate = denom ? monthAttend / denom : 0;
 
   return {
     totalUsers,
-    active7Users: activeUserIds.size,
-    active7dRate: activeUserIds.size / totalUsers,
-    monthAvgRate: monthDayLimit > 0 ? monthRateSum / monthDayLimit : 0,
+    active7Users,
+    active7dRate,
+    monthAttend,
+    daysElapsed,
+    monthAvgRate,
   };
 }
 
-function calcStreak(doneSet, fromDate) {
+function calcStreakFromMap_(doneMap, todayYmd) {
   let streak = 0;
-  let cursor = new Date(fromDate + "T00:00:00");
+  const d = parseDateYmd_(todayYmd);
 
-  while (true) {
-    const key = normalizeDate(cursor);
-    if (!doneSet.has(key)) break;
-
-    streak += 1;
-    cursor.setDate(cursor.getDate() - 1);
+  while (streak <= 5000) {
+    const key = normalizeDate(d);
+    if (!doneMap[key]) break;
+    streak++;
+    d.setDate(d.getDate() - 1);
   }
+
   return streak;
 }
 
-function isWithinLastDays(dateStr, baseDateStr, days) {
-  const dayMs = 24 * 60 * 60 * 1000;
-  const target = new Date(dateStr + "T00:00:00").getTime();
-  const base = new Date(baseDateStr + "T00:00:00").getTime();
-  const diff = base - target;
-  return diff >= 0 && diff <= dayMs * (days - 1);
-}
-
 /* ============================
-   DataStore
+   Data Store
 ============================ */
 class DataStore {
   constructor() {
-    this.sheet = SpreadsheetApp.openById(resolveSpreadsheetId());
-    this.users = this.ensureSheet(SHEET_USERS, ["userId", "name", "passwordSalt", "passwordHash", "createdAt", "updatedAt"]);
-    this.attendance = this.ensureSheet(SHEET_ATTENDANCE, ["date", "userId", "reps", "createdAt"]);
-    this.sessions = this.ensureSheet(SHEET_SESSIONS, ["token", "userId", "expiresAt", "createdAt", "updatedAt"]);
+    this.ss = SpreadsheetApp.openById(resolveSpreadsheetId());
+
+    this.users = this.ensureSheet(SHEET_USERS, [
+      "userId",
+      "name",
+      "passwordSalt",
+      "passwordHash",
+      "createdAt",
+      "updatedAt",
+    ]);
+
+    this.attendance = this.ensureSheet(SHEET_ATTENDANCE, [
+      "date",
+      "userId",
+      "reps",
+      "createdAt",
+    ]);
+
+    this.sessions = this.ensureSheet(SHEET_SESSIONS, [
+      "token",
+      "userId",
+      "expiresAt",
+      "createdAt",
+      "updatedAt",
+    ]);
   }
 
-  ensureSheet(name, headers) {
-    let sheet = this.sheet.getSheetByName(name);
+  ensureSheet(name, header) {
+    let sheet = this.ss.getSheetByName(name);
     if (!sheet) {
-      sheet = this.sheet.insertSheet(name);
+      sheet = this.ss.insertSheet(name);
     }
 
-    const firstRow = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
-    const hasHeader = firstRow.some((cell) => String(cell || "").trim() !== "");
+    const hasHeader = sheet.getLastRow() >= 1;
     if (!hasHeader) {
-      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      sheet.getRange(1, 1, 1, header.length).setValues([header]);
     }
     return sheet;
   }
@@ -365,6 +518,18 @@ class DataStore {
     return this.listUsers().find((u) => u.userId === target) || null;
   }
 
+  findUserByPin4(pin4) {
+    const pin = normalizePin4(pin4);
+    if (!pin) return null;
+
+    const users = this.listUsers();
+    for (let i = 0; i < users.length; i++) {
+      const u = users[i];
+      if (verifyPassword(pin, u.passwordSalt, u.passwordHash)) return u;
+    }
+    return null;
+  }
+
   addUser(user) {
     const now = nowString();
     this.users.appendRow([user.userId, user.name, user.passwordSalt, user.passwordHash, now, now]);
@@ -379,10 +544,24 @@ class DataStore {
       .filter((r) => normalizeUserId(r[1]) === target)
       .map((r) => ({
         date: normalizeDate(r[0]),
+        userId: normalizeUserId(r[1]),
         reps: Number(r[2] || 0),
         createdAt: String(r[3] || ""),
       }))
+      .filter((e) => e.date && e.userId)
       .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  }
+
+  getAllAttendanceEntries() {
+    const values = this.attendance.getDataRange().getValues();
+    const [, ...rows] = values;
+    return rows
+      .map((r) => ({
+        date: normalizeDate(r[0]),
+        userId: normalizeUserId(r[1]),
+        reps: Number(r[2] || 0),
+      }))
+      .filter((e) => e.date && e.userId);
   }
 
   recordAttendance(userId, dateStr, reps) {
@@ -477,13 +656,27 @@ function normalizeUserId(value) {
   return /^[A-Za-z0-9_-]{3,32}$/.test(userId) ? userId : "";
 }
 
+function normalizePin4(value) {
+  const pin = String(value || "").trim();
+  return /^\d{4}$/.test(pin) ? pin : "";
+}
+
+function normalizeReps(value) {
+  if (value == null || value === "") return 30;
+  const num = Number(value);
+  if (!isFinite(num) || num < 1 || num > 999) return 0;
+  return Math.floor(num);
+}
+
 function normalizeDate(value) {
   const date = value instanceof Date ? value : new Date(value);
   return Utilities.formatDate(date, TIMEZONE, DATE_FORMAT);
 }
 
-function pad2(n) {
-  return String(n).padStart(2, "0");
+function parseDateYmd_(ymd) {
+  const m = String(ymd).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return new Date();
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
 }
 
 function nowString() {
@@ -528,6 +721,27 @@ function bytesToHex(bytes) {
     .join("");
 }
 
+function requireUserFromToken(token, store) {
+  const t = String(token || "").trim();
+  if (!t) return fail("missing_token", "token は必須です。");
+
+  const session = store.findSession(t);
+  if (!session) return fail("invalid_token", "セッションが無効です。再ログインしてください。");
+
+  if (session.expiresAt.getTime() < Date.now()) {
+    store.deleteSession(t);
+    return fail("session_expired", "セッションが期限切れです。再ログインしてください。");
+  }
+
+  const user = store.findUser(session.userId);
+  if (!user) {
+    store.deleteSession(t);
+    return fail("user_not_found", "ユーザーが見つかりません。");
+  }
+
+  return { ok: true, userId: user.userId, name: user.name };
+}
+
 function fail(error, message) {
   return { ok: false, error, message };
 }
@@ -544,5 +758,5 @@ function response(body, callbackName) {
 }
 
 function isValidCallbackName(name) {
-  return /^[A-Za-z_$][0-9A-Za-z_$]*$/.test(String(name || ""));
+  return /^[A-Za-z_$][0-9A-Za-z_$\.]*$/.test(String(name || ""));
 }
