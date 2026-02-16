@@ -174,6 +174,7 @@
       border-radius: 12px;
       border:1px solid var(--line);
       display:flex;
+      flex-direction:column;
       align-items:center;
       justify-content:center;
       font-size:12px;
@@ -181,17 +182,52 @@
       color:#111;
       position:relative;
       overflow:hidden;
+      gap:2px;
+      line-height:1;
     }
+    .dayNum{
+      font-weight:700;
+      line-height:1;
+    }
+    .holidayLabel{
+      font-size:9px;
+      color:#9a7b00;
+      line-height:1;
+      font-weight:700;
+      display:none;
+    }
+    .day.holiday .holidayLabel{ display:block; }
     .day.off{
       background:#f6f6f6;
       color:#bbb;
       border-style:dashed;
     }
+    .day.sat{
+      background:#f2f8ff;
+      border-color:#d9e8ff;
+      color:#1f4f8b;
+    }
+    .day.sun{
+      background:#fff3f3;
+      border-color:#ffdede;
+      color:#8b2c2c;
+    }
+    .day.holiday{
+      background:#fffbe8;
+      border-color:#ffefb0;
+      color:#7a6200;
+    }
     .day.done{
-      background:#fff1e1;
+      box-shadow: inset 0 0 0 2px #ffb347;
+    }
+    .day.done::after{
+      content:"✓";
+      position:absolute;
+      top:3px;
+      right:5px;
+      font-size:10px;
       color:#9a4b00;
-      border-color:#ffcc99;
-      box-shadow: inset 0 0 0 1px #ffc488;
+      font-weight:900;
     }
     .day.today{
       outline:2px solid rgba(0,0,0,.25);
@@ -833,6 +869,19 @@ const auth = {
 let currentMonthKey = ""; // "yyyy-MM"
 let todayKey = "";        // "yyyy-MM-dd"
 let monthDoneDates = [];  // string[] for current month
+let jpHolidayMap = {};    // { "yyyy-MM-dd": "祝日名" }
+
+async function loadJpHolidays() {
+  try {
+    const res = await fetch("https://holidays-jp.github.io/api/v1/date.json", { cache: "force-cache" });
+    if (!res.ok) throw new Error(`祝日取得失敗: ${res.status}`);
+    const data = await res.json();
+    jpHolidayMap = (data && typeof data === "object") ? data : {};
+  } catch (e) {
+    console.warn("祝日データの取得に失敗しました", e);
+    jpHolidayMap = {};
+  }
+}
 
 /* ============================
    描画
@@ -861,11 +910,29 @@ function renderCalendar(monthKey, doneDates, todayStr) {
   const doneSet = new Set(doneDates || []);
   for (let d = 1; d <= max; d++) {
     const dateStr = ymd(y, m, d);
+    const dow = new Date(y, m - 1, d).getDay();
+    const holidayName = jpHolidayMap[dateStr];
     const dayEl = document.createElement("div");
     dayEl.className = "day";
+    if (dow === 6) dayEl.classList.add("sat");
+    if (dow === 0) dayEl.classList.add("sun");
+    if (holidayName) {
+      dayEl.classList.add("holiday");
+      dayEl.title = holidayName;
+    }
     if (doneSet.has(dateStr)) dayEl.classList.add("done");
     if (todayStr && dateStr === todayStr) dayEl.classList.add("today");
-    dayEl.textContent = String(d);
+
+    const dayNum = document.createElement("div");
+    dayNum.className = "dayNum";
+    dayNum.textContent = String(d);
+    dayEl.appendChild(dayNum);
+
+    const holidayLabel = document.createElement("div");
+    holidayLabel.className = "holidayLabel";
+    holidayLabel.textContent = "祝日";
+    dayEl.appendChild(holidayLabel);
+
     container.appendChild(dayEl);
   }
 
@@ -1139,6 +1206,8 @@ function resetUrlToDefault() {
    起動
 ============================ */
 async function init() {
+  await loadJpHolidays();
+
   // 初期モード反映
   isManualMode = (el.modeCheckbox.checked === true);
   renderApiUrlFromMode();
