@@ -2,6 +2,10 @@
 
 このリポジトリの `index.html` が呼び出す Google Apps Script（GAS）Web アプリの仕様と、必要なファイルを自動生成するための手順をまとめます。
 
+## 仕様の正本
+- 現行仕様の厳密定義はリポジトリ直下の `SPECIFICATION.md` を参照してください。
+- この README は GAS セットアップ手順に特化し、要件定義との重複は最小化しています。
+
 ## データストア
 - **Spreadsheet** を 1 つ用意し、以下 3 シートを作成します。スクリプトはシートが無い場合自動生成します。
   - `Users` シート: `userId, name, passwordSalt, passwordHash, createdAt, updatedAt`
