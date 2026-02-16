@@ -25,8 +25,8 @@ GAS Web アプリのデプロイ URL に対し `GET` で呼び出します。フ
 | action | 必須パラメーター | 返却内容（主要） |
 | --- | --- | --- |
 | `health` | なし | `{ok, timezone, now, sessionExpiresDays}` |
-| `registerUser` | `userId, password, displayName` | `{ok, message}` |
-| `login` | `userId, password` | `{ok, token, name, userId, expiresAt}` |
+| `registerUser` | `userId, password(4桁数字), displayName` | `{ok, message}` |
+| `login` | `userId, password(4桁数字)` | `{ok, token, name, userId, expiresAt}` |
 | `logout` | `token` | `{ok, message}` |
 | `getDashboard` | `token` | `{ok, today, monthKey, me, model, retention}` |
 | `getAttendance` | `token, month(YYYY-MM)` | `{ok, monthKey, monthDoneDates}` |

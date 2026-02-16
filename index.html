@@ -403,6 +403,21 @@
     .repsWrap{ display:flex; gap:10px; align-items:center; }
     .repsWrap input{ max-width:140px; }
 
+    .authTabs{ display:flex; gap:8px; margin-bottom:10px; }
+    .tabBtn{
+      flex:1;
+      padding:10px 12px;
+      border:1px solid var(--line);
+      background:#fff;
+      color:#333;
+      border-radius:12px;
+      font-size:14px;
+      font-weight:700;
+    }
+    .tabBtn.active{ background:#111; color:#fff; border-color:#111; }
+    .authPanel{ display:none; }
+    .authPanel.active{ display:block; }
+
     @media (max-width: 560px){
       .row{ gap:8px; }
       .grid2{ grid-template-columns: 1fr; }
@@ -458,19 +473,31 @@
     <div class="main">
       <!-- ログイン/登録 -->
       <div class="card">
-        <div class="stackOnMobile">
-          <input type="password" id="pinLogin" inputmode="numeric" autocomplete="off" placeholder="参加用の PIN（4桁）を入力" />
-          <button type="button" class="btnPrimary" id="btnLogin">ログイン</button>
+        <div class="authTabs" role="tablist" aria-label="認証メニュー">
+          <button type="button" class="tabBtn active" id="tabLogin" role="tab" aria-selected="true">ログイン</button>
+          <button type="button" class="tabBtn" id="tabRegister" role="tab" aria-selected="false">初回登録</button>
         </div>
 
-        <div class="muted" style="margin-top:10px;">または 新しく登録する</div>
-
-        <div class="grid2 mt8">
-          <div>
-            <input type="text" id="regName" autocomplete="off" placeholder="ニックネーム（表示名）" />
+        <div class="authPanel active" id="panelLogin" role="tabpanel">
+          <div class="stackOnMobile">
+            <input type="text" id="userIdLogin" autocomplete="username" placeholder="登録済みユーザー名" />
+            <input type="password" id="passwordLogin" inputmode="numeric" autocomplete="current-password" placeholder="パスワード（4桁）" />
+            <button type="button" class="btnPrimary" id="btnLogin">ログイン</button>
           </div>
-          <div class="row">
-            <input type="password" id="pinReg" inputmode="numeric" autocomplete="off" placeholder="登録用PIN（4桁）" />
+        </div>
+
+        <div class="authPanel" id="panelRegister" role="tabpanel" aria-hidden="true">
+          <div class="grid2 mt8">
+            <div>
+              <input type="text" id="regName" autocomplete="name" placeholder="表示名（ニックネーム）" />
+            </div>
+            <div>
+              <input type="text" id="userIdReg" autocomplete="username" placeholder="ユーザー名（英数字・-_、3〜32文字）" />
+            </div>
+          </div>
+
+          <div class="row mt8">
+            <input type="password" id="passwordReg" inputmode="numeric" autocomplete="new-password" placeholder="登録用パスワード（4桁）" />
             <button type="button" class="btnPrimary" id="btnRegister">登録</button>
           </div>
         </div>
@@ -596,11 +623,18 @@ const el = {
   statusPill: document.getElementById("statusPill"),
   whoPill: document.getElementById("whoPill"),
 
-  pinLogin: document.getElementById("pinLogin"),
+  tabLogin: document.getElementById("tabLogin"),
+  tabRegister: document.getElementById("tabRegister"),
+  panelLogin: document.getElementById("panelLogin"),
+  panelRegister: document.getElementById("panelRegister"),
+
+  userIdLogin: document.getElementById("userIdLogin"),
+  passwordLogin: document.getElementById("passwordLogin"),
   btnLogin: document.getElementById("btnLogin"),
 
   regName: document.getElementById("regName"),
-  pinReg: document.getElementById("pinReg"),
+  userIdReg: document.getElementById("userIdReg"),
+  passwordReg: document.getElementById("passwordReg"),
   btnRegister: document.getElementById("btnRegister"),
 
   repsInput: document.getElementById("repsInput"),
@@ -693,6 +727,8 @@ function setWho(text, isLoggedIn) {
 function setLoadingState(isLoading) {
   el.btnLogin.disabled = isLoading;
   el.btnRegister.disabled = isLoading;
+  el.tabLogin.disabled = isLoading;
+  el.tabRegister.disabled = isLoading;
   el.btnCheckin.disabled = isLoading || !auth.token;
   el.btnReload.disabled = isLoading;
   el.btnPrevMonth.disabled = isLoading;
@@ -834,6 +870,20 @@ let currentMonthKey = ""; // "yyyy-MM"
 let todayKey = "";        // "yyyy-MM-dd"
 let monthDoneDates = [];  // string[] for current month
 
+function setAuthTab(tabName) {
+  const isLogin = tabName === "login";
+
+  el.tabLogin.classList.toggle("active", isLogin);
+  el.tabRegister.classList.toggle("active", !isLogin);
+  el.tabLogin.setAttribute("aria-selected", String(isLogin));
+  el.tabRegister.setAttribute("aria-selected", String(!isLogin));
+
+  el.panelLogin.classList.toggle("active", isLogin);
+  el.panelRegister.classList.toggle("active", !isLogin);
+  el.panelLogin.setAttribute("aria-hidden", String(!isLogin));
+  el.panelRegister.setAttribute("aria-hidden", String(isLogin));
+}
+
 /* ============================
    描画
 ============================ */
@@ -923,11 +973,11 @@ function updateKpisFromDashboard(dash) {
 async function apiHealth() {
   return requestJsonp({ action: "health" });
 }
-async function apiLogin(pin4) {
-  return requestJsonp({ action: "login", pin4 });
+async function apiLogin(userId, password) {
+  return requestJsonp({ action: "login", userId, password });
 }
-async function apiRegister(pin4, displayName) {
-  return requestJsonp({ action: "registerUser", pin4, displayName });
+async function apiRegister(userId, password, displayName) {
+  return requestJsonp({ action: "registerUser", userId, password, displayName });
 }
 async function apiDashboard(token) {
   return requestJsonp({ action: "getDashboard", token });
@@ -997,7 +1047,7 @@ async function refreshAll(reasonLabel = "更新") {
     const msg = String(e.message || "");
     if (msg.indexOf("セッション切れ") >= 0 || msg.indexOf("未ログイン") >= 0) {
       clearAuth();
-      showToast("セッション切れです。PINで再ログインしてください");
+      showToast("セッション切れです。ユーザー名とパスワードで再ログインしてください");
     } else {
       showToast("更新に失敗しました");
     }
@@ -1010,15 +1060,21 @@ async function refreshAll(reasonLabel = "更新") {
    イベント
 ============================ */
 async function handleLogin() {
-  const pin = el.pinLogin.value.trim();
-  if (!/^\d{4}$/.test(pin)) {
-    showToast("PIN は4桁の数字です");
+  const userId = el.userIdLogin.value.trim();
+  const password = el.passwordLogin.value.trim();
+
+  if (!/^[A-Za-z0-9_-]{3,32}$/.test(userId)) {
+    showToast("ユーザー名は英数字・-_、3〜32文字です");
+    return;
+  }
+  if (!/^\d{4}$/.test(password)) {
+    showToast("パスワードは4桁の数字です");
     return;
   }
 
   setLoadingState(true);
   try {
-    const res = await apiLogin(pin);
+    const res = await apiLogin(userId, password);
     if (!res?.ok) throw new Error(res?.message || res?.error || "ログイン失敗");
 
     setAuth(res.token, res.name || "");
@@ -1037,27 +1093,32 @@ async function handleLogin() {
 }
 
 async function handleRegister() {
-  const pin = el.pinReg.value.trim();
   const name = el.regName.value.trim();
+  const userId = el.userIdReg.value.trim();
+  const password = el.passwordReg.value.trim();
 
   if (!name) { showToast("名前を入力してください"); return; }
-  if (!/^\d{4}$/.test(pin)) { showToast("PIN は4桁の数字です"); return; }
+  if (!/^[A-Za-z0-9_-]{3,32}$/.test(userId)) { showToast("ユーザー名は英数字・-_、3〜32文字です"); return; }
+  if (!/^\d{4}$/.test(password)) { showToast("パスワードは4桁の数字です"); return; }
 
   setLoadingState(true);
   try {
-    const res = await apiRegister(pin, name);
+    const res = await apiRegister(userId, password, name);
     if (!res?.ok) throw new Error(res?.message || res?.error || "登録失敗");
 
     showToast("登録しました。ログインします");
-    el.pinLogin.value = pin;
+    el.userIdLogin.value = userId;
+    el.passwordLogin.value = password;
 
     // 登録直後にログイン
-    const loginRes = await apiLogin(pin);
+    const loginRes = await apiLogin(userId, password);
     if (!loginRes?.ok) throw new Error(loginRes?.message || loginRes?.error || "ログイン失敗");
 
     setAuth(loginRes.token, loginRes.name || name);
     el.regName.value = "";
-    el.pinReg.value = "";
+    el.userIdReg.value = "";
+    el.passwordReg.value = "";
+    setAuthTab("login");
 
     currentMonthKey = "";
     await refreshAll("登録");
@@ -1139,6 +1200,8 @@ function resetUrlToDefault() {
    起動
 ============================ */
 async function init() {
+  setAuthTab("login");
+
   // 初期モード反映
   isManualMode = (el.modeCheckbox.checked === true);
   renderApiUrlFromMode();
@@ -1164,10 +1227,13 @@ async function init() {
     setAuth("", "");
     currentMonthKey = (new Date().getFullYear()) + "-" + pad2(new Date().getMonth() + 1);
     renderCalendar(currentMonthKey, [], "");
-    el.msg.textContent = "PINでログインしてください";
+    el.msg.textContent = "ユーザー名とパスワードでログインしてください";
   }
 
   // events
+  el.tabLogin.addEventListener("click", () => setAuthTab("login"));
+  el.tabRegister.addEventListener("click", () => setAuthTab("register"));
+
   el.btnLogin.addEventListener("click", handleLogin);
   el.btnRegister.addEventListener("click", handleRegister);
   el.btnCheckin.addEventListener("click", handleCheckin);
@@ -1205,10 +1271,16 @@ async function init() {
   });
 
   // enterキー対応（モバイルで地味に効く）
-  el.pinLogin.addEventListener("keydown", (e) => {
+  el.userIdLogin.addEventListener("keydown", (e) => {
     if (e.key === "Enter") handleLogin();
   });
-  el.pinReg.addEventListener("keydown", (e) => {
+  el.passwordLogin.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") handleLogin();
+  });
+  el.userIdReg.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") handleRegister();
+  });
+  el.passwordReg.addEventListener("keydown", (e) => {
     if (e.key === "Enter") handleRegister();
   });
 }
