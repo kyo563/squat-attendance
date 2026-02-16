@@ -421,7 +421,7 @@
       <div class="row justifyBetween" style="gap:12px">
         <div class="grow">
           <h1>スクワット出席</h1>
-          <p class="muted mb6">みんなで毎日スクワット 10 回しよう（実績は20回でも良いものとします）</p>
+          <p class="muted mb6">みんなで毎日スクワット 30 回を目標にしよう</p>
 
           <div class="row" style="flex-wrap:wrap">
             <div class="pill" id="statusPill">接続: 確認中...</div>
@@ -494,8 +494,8 @@
         </div>
 
         <div class="row mt10 repsWrap" style="flex-wrap:wrap">
-          <input type="number" id="repsInput" inputmode="numeric" min="1" max="999" value="20" />
-          <button type="button" class="btnPrimary" id="btnCheckin">今日スクワットした</button>
+          <input type="number" id="repsInput" inputmode="numeric" min="1" max="999" value="30" />
+          <button type="button" class="btnPrimary" id="btnCheckin">今日30回スクワットした</button>
         </div>
         <div class="muted mt8" id="todayMeta">--</div>
       </div>
@@ -1074,7 +1074,7 @@ async function handleCheckin() {
     showToast("先にログインしてください");
     return;
   }
-  const reps = Number(el.repsInput.value || 20);
+  const reps = Number(el.repsInput.value || 30);
   if (!isFinite(reps) || reps <= 0 || reps > 999) {
     showToast("回数（reps）が不正です");
     return;
