@@ -3,20 +3,31 @@
 このリポジトリの `index.html` が呼び出す Google Apps Script（GAS）Web アプリの仕様と、必要なファイルを自動生成するための手順をまとめます。
 
 ## データストア
-- **Spreadsheet** を 1 つ用意し、以下 2 シートを作成します。スクリプトはシートが無い場合自動生成します。
-  - `Users` シート: `pin, name, createdAt, updatedAt`
-  - `Attendance` シート: `date, pin, reps, createdAt`
+- **Spreadsheet** を 1 つ用意し、以下 3 シートを作成します。スクリプトはシートが無い場合自動生成します。
+  - `Users` シート: `userId, name, passwordSalt, passwordHash, createdAt, updatedAt`
+  - `Attendance` シート: `date, userId, reps, createdAt`
+  - `Sessions` シート: `token, userId, expiresAt, createdAt, updatedAt`
 - スクリプト プロパティ `SPREADSHEET_ID` にシート ID を保存するか、`Code.gs` 内の `SPREADSHEET_ID` を書き換えてください。
 - （任意）共有鍵を使う場合は `API_SHARED_KEY` を設定し、クライアントから `key` パラメーターで渡します。
+
+## セキュリティ改善の要点
+- 認証を `PIN` 単体から `userId + password` へ変更。
+- `registerUser` 時に、`passwordSalt` と `SHA-256(passwordSalt:password)` を保存（平文パスワードは保存しない）。
+- `login` 成功時にセッショントークンを発行し、`Sessions` シートで管理。
+- `getAttendance` / `checkin`（および `getDashboard`）は `token` 必須。
+- `SESSION_EXPIRES_DAYS`（`Code.gs` 定数）でセッション有効期限を管理し、期限切れトークンは失効。
+- `logout` API を追加し、セッションを明示的に削除可能。
+- 同時実行対策として `registerUser` と `checkin` に `LockService` を利用。
 
 ## API フォーマット
 GAS Web アプリのデプロイ URL に対し `GET` で呼び出します。フロントエンドは JSONP のため `callback` パラメーターも付与します。
 
 | action | 必須パラメーター | 返却内容（主要） |
 | --- | --- | --- |
-| `health` | なし | `{ok, timezone, now}` |
-| `registerUser` | `pin4, displayName` | `{ok, message}` |
-| `login` | `pin4` | `{ok, token, name}` |
+| `health` | なし | `{ok, timezone, now, sessionExpiresDays}` |
+| `registerUser` | `userId, password, displayName` | `{ok, message}` |
+| `login` | `userId, password` | `{ok, token, name, userId, expiresAt}` |
+| `logout` | `token` | `{ok, message}` |
 | `getDashboard` | `token` | `{ok, today, monthKey, me, model, retention}` |
 | `getAttendance` | `token, month(YYYY-MM)` | `{ok, monthKey, monthDoneDates}` |
 | `checkin` | `token, reps` | `{ok, message, date}` |
