@@ -426,10 +426,6 @@
           <div class="row" style="flex-wrap:wrap">
             <div class="pill" id="statusPill">接続: 確認中...</div>
             <div class="pill" id="whoPill">未ログイン</div>
-            <div class="pill">
-              <span>タイムゾーン</span>
-              <strong id="tzLabel">Asia/Kuala_Lumpur</strong>
-            </div>
           </div>
         </div>
 
@@ -585,7 +581,6 @@ const DEFAULT_GAS_API_URL =
 const API_URL_STORAGE_KEY = "squat_app_api_url";
 const TOKEN_STORAGE_KEY   = "squat_app_token";
 const NAME_STORAGE_KEY    = "squat_app_name";
-const TZ_LABEL_DEFAULT    = "Asia/Kuala_Lumpur";
 const TEMP_MODEL_USER_ID  = "AAA"; // 雲丹ユーザー登録までの仮設定。登録後に更新してください。
 
 // 手動URLが有効な場合に使うAPI URL
@@ -600,7 +595,6 @@ let gasApiUrl = DEFAULT_GAS_API_URL;
 const el = {
   statusPill: document.getElementById("statusPill"),
   whoPill: document.getElementById("whoPill"),
-  tzLabel: document.getElementById("tzLabel"),
 
   pinLogin: document.getElementById("pinLogin"),
   btnLogin: document.getElementById("btnLogin"),
@@ -804,7 +798,7 @@ function parseMonthKey(monthKey) {
 }
 
 function monthKeyToLabel(monthKey){
-  return `${monthKey}（${el.tzLabel.textContent || TZ_LABEL_DEFAULT}）`;
+  return monthKey;
 }
 
 function addMonthKey(monthKey, delta) {
@@ -985,9 +979,6 @@ async function refreshAll(reasonLabel = "更新") {
     if (!currentMonthKey) currentMonthKey = todayKey.slice(0, 7);
 
     updateKpisFromDashboard(dash);
-
-    // タイムゾーン表示は固定（Settingsから引くAPIは用意していないため）
-    el.tzLabel.textContent = TZ_LABEL_DEFAULT;
 
     const att = await apiAttendance(auth.token, currentMonthKey);
     if (!att?.ok) throw new Error(att?.message || att?.error || "attendance失敗");
