@@ -469,6 +469,8 @@
     .repsWrap{ display:flex; gap:10px; align-items:center; }
     .repsWrap input{ max-width:140px; }
 
+    .authCard.hidden{ display:none; }
+
     .authTabs{ display:flex; gap:8px; margin-bottom:10px; }
     .tabBtn{
       flex:1;
@@ -538,7 +540,7 @@
 
     <div class="main">
       <!-- ログイン/登録 -->
-      <div class="card">
+      <div class="card authCard" id="authCard">
         <div class="authTabs" role="tablist" aria-label="認証メニュー">
           <button type="button" class="tabBtn active" id="tabLogin" role="tab" aria-selected="true">ログイン</button>
           <button type="button" class="tabBtn" id="tabRegister" role="tab" aria-selected="false">初回登録</button>
@@ -587,7 +589,6 @@
         </div>
 
         <div class="row mt10 repsWrap" style="flex-wrap:wrap">
-          <input type="number" id="repsInput" inputmode="numeric" min="1" max="999" value="30" />
           <button type="button" class="btnPrimary" id="btnCheckin">今日30回スクワットした</button>
         </div>
         <div class="muted mt8" id="todayMeta">--</div>
@@ -696,6 +697,7 @@ const el = {
   tabRegister: document.getElementById("tabRegister"),
   panelLogin: document.getElementById("panelLogin"),
   panelRegister: document.getElementById("panelRegister"),
+  authCard: document.getElementById("authCard"),
 
   userIdLogin: document.getElementById("userIdLogin"),
   passwordLogin: document.getElementById("passwordLogin"),
@@ -705,7 +707,6 @@ const el = {
   passwordReg: document.getElementById("passwordReg"),
   btnRegister: document.getElementById("btnRegister"),
 
-  repsInput: document.getElementById("repsInput"),
   btnCheckin: document.getElementById("btnCheckin"),
 
   btnReload: document.getElementById("btnReload"),
@@ -792,6 +793,7 @@ function updateStatusPill(label, value, type = "info") {
 function setWho(text, isLoggedIn) {
   el.whoPill.textContent = text;
   el.btnLogout.style.display = isLoggedIn ? "inline-flex" : "none";
+  el.authCard.classList.toggle("hidden", isLoggedIn);
 }
 
 function setLoadingState(isLoading) {
@@ -1085,8 +1087,8 @@ async function apiDashboard(token) {
 async function apiAttendance(token, monthKey) {
   return requestJsonp({ action: "getAttendance", token, month: monthKey });
 }
-async function apiCheckin(token, reps) {
-  return requestJsonp({ action: "checkin", token, reps });
+async function apiCheckin(token) {
+  return requestJsonp({ action: "checkin", token });
 }
 
 /* ============================
@@ -1232,15 +1234,9 @@ async function handleCheckin() {
     showToast("先にログインしてください");
     return;
   }
-  const reps = Number(el.repsInput.value || 30);
-  if (!isFinite(reps) || reps <= 0 || reps > 999) {
-    showToast("回数（reps）が不正です");
-    return;
-  }
-
   setLoadingState(true);
   try {
-    const res = await apiCheckin(auth.token, reps);
+    const res = await apiCheckin(auth.token);
     if (!res?.ok) throw new Error(res?.message || res?.error || "チェックイン失敗");
 
     showToast("チェックインしました");

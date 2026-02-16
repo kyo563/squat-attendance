@@ -30,7 +30,7 @@ GAS Web アプリのデプロイ URL に対し `GET` で呼び出します。フ
 | `logout` | `token` | `{ok, message}` |
 | `getDashboard` | `token` | `{ok, today, monthKey, me, model, retention}` |
 | `getAttendance` | `token, month(YYYY-MM)` | `{ok, monthKey, monthDoneDates}` |
-| `checkin` | `token, reps` | `{ok, message, date}` |
+| `checkin` | `token`（`reps` 省略時は 30 として記録） | `{ok, message, date}` |
 
 ### 共通レスポンス
 ```jsonc
