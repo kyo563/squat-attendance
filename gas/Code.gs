@@ -1,9 +1,11 @@
 const SPREADSHEET_ID = "{{SPREADSHEET_ID}}"; // スクリプト プロパティ `SPREADSHEET_ID` を優先
 const API_SHARED_KEY = ""; // 利用する場合のみ値を入れ、クライアントは key パラメーターを付与
 const MODEL_USER_ID = ""; // 任意: ダッシュボード下部のモデルユーザー表示用
+const SESSION_EXPIRES_DAYS = 7;
 
 const SHEET_USERS = "Users";
 const SHEET_ATTENDANCE = "Attendance";
+const SHEET_SESSIONS = "Sessions";
 const TIMEZONE = "Asia/Tokyo";
 const DATE_FORMAT = "yyyy-MM-dd";
 
@@ -24,6 +26,8 @@ function doGet(e) {
         return response(handleHealth(), callback);
       case "login":
         return response(handleLogin(store, params), callback);
+      case "logout":
+        return response(handleLogout(store, params), callback);
       case "registerUser":
         return response(handleRegister(store, params), callback);
       case "getDashboard":
@@ -51,6 +55,7 @@ function resolveAction(params) {
     case "dashboard":
       return "getDashboard";
     case "login":
+    case "logout":
     case "getAttendance":
     case "checkin":
       return mode;
@@ -64,44 +69,75 @@ function handleHealth() {
     ok: true,
     timezone: TIMEZONE,
     now: nowString(),
+    sessionExpiresDays: SESSION_EXPIRES_DAYS,
   };
 }
 
 function handleLogin(store, params) {
-  const pin4 = normalizePin(params.pin4 || params.pin);
-  if (!pin4) return fail("missing_pin", "PIN は4桁の数字です。");
+  const userId = normalizeUserId(params.userId);
+  const password = String(params.password || "");
 
-  const user = store.findUser(pin4);
+  if (!userId) return fail("missing_user_id", "userId は必須です。");
+  if (!password) return fail("missing_password", "password は必須です。");
+
+  const user = store.findUser(userId);
   if (!user) return fail("user_not_found", "ユーザーが存在しません。");
+  if (!verifyPassword(password, user.passwordSalt, user.passwordHash)) {
+    return fail("invalid_credentials", "userId または password が正しくありません。");
+  }
+
+  const token = createSessionToken();
+  store.upsertSession(user.userId, token, getSessionExpireDate());
 
   return {
     ok: true,
-    token: createToken(user.pin),
+    token,
     name: user.name,
+    userId: user.userId,
+    expiresAt: dateTimeString(getSessionExpireDate()),
   };
+}
+
+function handleLogout(store, params) {
+  const token = String(params.token || "").trim();
+  if (!token) return fail("missing_token", "token は必須です。");
+
+  store.deleteSession(token);
+  return { ok: true, message: "ログアウトしました" };
 }
 
 function handleRegister(store, params) {
-  const pin4 = normalizePin(params.pin4 || params.pin);
+  const userId = normalizeUserId(params.userId);
+  const password = String(params.password || "");
   const displayName = String(params.displayName || params.name || "").trim();
 
   if (!displayName) return fail("missing_name", "名前を入力してください。");
-  if (!pin4) return fail("missing_pin", "PIN は4桁の数字です。");
+  if (!userId) return fail("missing_user_id", "userId は必須です（英数字・-_、3〜32文字）。");
+  if (password.length < 8) return fail("weak_password", "password は8文字以上にしてください。");
 
-  if (store.findUser(pin4)) {
-    return fail("already_exists", "同じ PIN のユーザーが登録済みです。");
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30 * 1000);
+  try {
+    if (store.findUser(userId)) {
+      return fail("already_exists", "同じ userId のユーザーが登録済みです。");
+    }
+
+    const passwordSalt = generateSalt();
+    const passwordHash = hashPassword(password, passwordSalt);
+
+    store.addUser({ userId, name: displayName, passwordSalt, passwordHash });
+    return {
+      ok: true,
+      message: "登録しました",
+    };
+  } finally {
+    lock.releaseLock();
   }
-
-  store.addUser({ pin: pin4, name: displayName });
-  return {
-    ok: true,
-    message: "登録しました",
-  };
 }
 
 function handleDashboard(store, params) {
-  const mePin = requirePinFromToken(params.token, store);
-  if (!mePin.ok) return mePin;
+  const me = requireUserFromToken(params.token, store);
+  if (!me.ok) return me;
 
   const today = normalizeDate(new Date());
   const monthKey = today.slice(0, 7);
@@ -110,22 +146,22 @@ function handleDashboard(store, params) {
     ok: true,
     today,
     monthKey,
-    me: buildMeMetrics(store, mePin.pin, today, monthKey),
+    me: buildMeMetrics(store, me.userId, today, monthKey),
     model: buildModelMetrics(store, today),
     retention: buildRetentionMetrics(store, today, monthKey),
   };
 }
 
 function handleGetAttendance(store, params) {
-  const mePin = requirePinFromToken(params.token, store);
-  if (!mePin.ok) return mePin;
+  const me = requireUserFromToken(params.token, store);
+  if (!me.ok) return me;
 
   const monthKey = String(params.month || "").match(/^\d{4}-\d{2}$/)
     ? String(params.month)
     : normalizeDate(new Date()).slice(0, 7);
 
   const monthDoneDates = store
-    .getAttendanceEntriesForPin(mePin.pin)
+    .getAttendanceEntriesForUserId(me.userId)
     .map((e) => e.date)
     .filter((date) => date.indexOf(monthKey) === 0)
     .sort();
@@ -138,8 +174,8 @@ function handleGetAttendance(store, params) {
 }
 
 function handleCheckin(store, params) {
-  const mePin = requirePinFromToken(params.token, store);
-  if (!mePin.ok) return mePin;
+  const me = requireUserFromToken(params.token, store);
+  if (!me.ok) return me;
 
   const reps = Number(params.reps || 0);
   if (!isFinite(reps) || reps < 1 || reps > 999) {
@@ -147,7 +183,13 @@ function handleCheckin(store, params) {
   }
 
   const today = normalizeDate(new Date());
-  store.recordAttendance(mePin.pin, today, reps);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30 * 1000);
+  try {
+    store.recordAttendance(me.userId, today, reps);
+  } finally {
+    lock.releaseLock();
+  }
 
   return {
     ok: true,
@@ -156,18 +198,30 @@ function handleCheckin(store, params) {
   };
 }
 
-function requirePinFromToken(token, store) {
-  const pin = parseToken(token);
-  if (!pin) return fail("auth_required", "未ログインです。再ログインしてください。");
+function requireUserFromToken(token, store) {
+  const value = String(token || "").trim();
+  if (!value) return fail("auth_required", "未ログインです。再ログインしてください。");
 
-  const user = store.findUser(pin);
-  if (!user) return fail("session_expired", "セッション切れです。再ログインしてください。");
+  const session = store.findSession(value);
+  if (!session) return fail("auth_required", "未ログインです。再ログインしてください。");
 
-  return { ok: true, pin };
+  const now = new Date();
+  if (session.expiresAt.getTime() <= now.getTime()) {
+    store.deleteSession(value);
+    return fail("session_expired", "セッション有効期限が切れました。再ログインしてください。");
+  }
+
+  const user = store.findUser(session.userId);
+  if (!user) {
+    store.deleteSession(value);
+    return fail("session_expired", "セッション切れです。再ログインしてください。");
+  }
+
+  return { ok: true, userId: user.userId };
 }
 
-function buildMeMetrics(store, pin, today, monthKey) {
-  const entries = store.getAttendanceEntriesForPin(pin);
+function buildMeMetrics(store, userId, today, monthKey) {
+  const entries = store.getAttendanceEntriesForUserId(userId);
   const doneDates = entries.map((e) => e.date);
   const doneSet = new Set(doneDates);
 
@@ -185,15 +239,15 @@ function buildMeMetrics(store, pin, today, monthKey) {
 }
 
 function buildModelMetrics(store, today) {
-  const modelPin = normalizePin(MODEL_USER_ID);
-  if (!modelPin) return { userId: null, today: { done: null, timestamp: "" } };
+  const modelUserId = normalizeUserId(MODEL_USER_ID);
+  if (!modelUserId) return { userId: null, today: { done: null, timestamp: "" } };
 
-  const user = store.findUser(modelPin);
-  if (!user) return { userId: modelPin, today: { done: null, timestamp: "" } };
+  const user = store.findUser(modelUserId);
+  if (!user) return { userId: modelUserId, today: { done: null, timestamp: "" } };
 
-  const todayEntry = store.getAttendanceEntriesForPin(modelPin).find((e) => e.date === today) || null;
+  const todayEntry = store.getAttendanceEntriesForUserId(modelUserId).find((e) => e.date === today) || null;
   return {
-    userId: modelPin,
+    userId: modelUserId,
     today: {
       done: !!todayEntry,
       timestamp: todayEntry ? todayEntry.createdAt : "",
@@ -213,12 +267,12 @@ function buildRetentionMetrics(store, today, monthKey) {
     };
   }
 
-  const activePins = new Set();
+  const activeUserIds = new Set();
   const monthDailyCount = {};
   const monthDayLimit = Number(today.slice(8, 10));
 
   users.forEach((u) => {
-    const entries = store.getAttendanceEntriesForPin(u.pin);
+    const entries = store.getAttendanceEntriesForUserId(u.userId);
     let active7 = false;
 
     entries.forEach((entry) => {
@@ -228,7 +282,7 @@ function buildRetentionMetrics(store, today, monthKey) {
       }
     });
 
-    if (active7) activePins.add(u.pin);
+    if (active7) activeUserIds.add(u.userId);
   });
 
   let monthRateSum = 0;
@@ -239,8 +293,8 @@ function buildRetentionMetrics(store, today, monthKey) {
 
   return {
     totalUsers,
-    active7Users: activePins.size,
-    active7dRate: activePins.size / totalUsers,
+    active7Users: activeUserIds.size,
+    active7dRate: activeUserIds.size / totalUsers,
     monthAvgRate: monthDayLimit > 0 ? monthRateSum / monthDayLimit : 0,
   };
 }
@@ -273,8 +327,9 @@ function isWithinLastDays(dateStr, baseDateStr, days) {
 class DataStore {
   constructor() {
     this.sheet = SpreadsheetApp.openById(resolveSpreadsheetId());
-    this.users = this.ensureSheet(SHEET_USERS, ["pin", "name", "createdAt", "updatedAt"]);
-    this.attendance = this.ensureSheet(SHEET_ATTENDANCE, ["date", "pin", "reps", "createdAt"]);
+    this.users = this.ensureSheet(SHEET_USERS, ["userId", "name", "passwordSalt", "passwordHash", "createdAt", "updatedAt"]);
+    this.attendance = this.ensureSheet(SHEET_ATTENDANCE, ["date", "userId", "reps", "createdAt"]);
+    this.sessions = this.ensureSheet(SHEET_SESSIONS, ["token", "userId", "expiresAt", "createdAt", "updatedAt"]);
   }
 
   ensureSheet(name, headers) {
@@ -295,28 +350,33 @@ class DataStore {
     const values = this.users.getDataRange().getValues();
     const [, ...rows] = values;
     return rows
-      .map((r) => ({ pin: normalizePin(r[0]), name: String(r[1] || "").trim() }))
-      .filter((u) => u.pin && u.name);
+      .map((r) => ({
+        userId: normalizeUserId(r[0]),
+        name: String(r[1] || "").trim(),
+        passwordSalt: String(r[2] || ""),
+        passwordHash: String(r[3] || ""),
+      }))
+      .filter((u) => u.userId && u.name && u.passwordSalt && u.passwordHash);
   }
 
-  findUser(pin) {
-    const target = normalizePin(pin);
+  findUser(userId) {
+    const target = normalizeUserId(userId);
     if (!target) return null;
-    return this.listUsers().find((u) => u.pin === target) || null;
+    return this.listUsers().find((u) => u.userId === target) || null;
   }
 
   addUser(user) {
     const now = nowString();
-    this.users.appendRow([user.pin, user.name, now, now]);
+    this.users.appendRow([user.userId, user.name, user.passwordSalt, user.passwordHash, now, now]);
   }
 
-  getAttendanceEntriesForPin(pin) {
-    const target = normalizePin(pin);
+  getAttendanceEntriesForUserId(userId) {
+    const target = normalizeUserId(userId);
     const values = this.attendance.getDataRange().getValues();
     const [, ...rows] = values;
 
     return rows
-      .filter((r) => normalizePin(r[1]) === target)
+      .filter((r) => normalizeUserId(r[1]) === target)
       .map((r) => ({
         date: normalizeDate(r[0]),
         reps: Number(r[2] || 0),
@@ -325,21 +385,78 @@ class DataStore {
       .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   }
 
-  recordAttendance(pin, dateStr, reps) {
-    const pin4 = normalizePin(pin);
+  recordAttendance(userId, dateStr, reps) {
+    const targetUserId = normalizeUserId(userId);
     const date = normalizeDate(dateStr);
     const all = this.attendance.getDataRange().getValues();
 
     for (let i = 1; i < all.length; i++) {
       const row = all[i];
-      if (normalizeDate(row[0]) === date && normalizePin(row[1]) === pin4) {
+      if (normalizeDate(row[0]) === date && normalizeUserId(row[1]) === targetUserId) {
         const rowIndex = i + 1;
         this.attendance.getRange(rowIndex, 3, 1, 2).setValues([[reps, row[3] || nowString()]]);
         return;
       }
     }
 
-    this.attendance.appendRow([date, pin4, reps, nowString()]);
+    this.attendance.appendRow([date, targetUserId, reps, nowString()]);
+  }
+
+  upsertSession(userId, token, expiresAtDate) {
+    const targetToken = String(token || "").trim();
+    if (!targetToken) return;
+
+    const now = nowString();
+    const expiresAt = dateTimeString(expiresAtDate);
+    const all = this.sessions.getDataRange().getValues();
+
+    for (let i = 1; i < all.length; i++) {
+      const row = all[i];
+      if (String(row[0] || "") === targetToken) {
+        const rowIndex = i + 1;
+        this.sessions.getRange(rowIndex, 2, 1, 4).setValues([[userId, expiresAt, row[3] || now, now]]);
+        return;
+      }
+    }
+
+    this.sessions.appendRow([targetToken, userId, expiresAt, now, now]);
+  }
+
+  findSession(token) {
+    const targetToken = String(token || "").trim();
+    if (!targetToken) return null;
+
+    const values = this.sessions.getDataRange().getValues();
+    const [, ...rows] = values;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (String(row[0] || "") !== targetToken) continue;
+
+      const userId = normalizeUserId(row[1]);
+      const expiresAtRaw = String(row[2] || "").trim();
+      const expiresAt = new Date(expiresAtRaw);
+      if (!userId || !expiresAtRaw || isNaN(expiresAt.getTime())) return null;
+
+      return {
+        token: targetToken,
+        userId,
+        expiresAt,
+      };
+    }
+    return null;
+  }
+
+  deleteSession(token) {
+    const targetToken = String(token || "").trim();
+    if (!targetToken) return;
+
+    const values = this.sessions.getDataRange().getValues();
+    for (let i = values.length - 1; i >= 1; i--) {
+      const row = values[i];
+      if (String(row[0] || "") === targetToken) {
+        this.sessions.deleteRow(i + 1);
+      }
+    }
   }
 }
 
@@ -355,9 +472,9 @@ function resolveSpreadsheetId() {
   return candidate.trim();
 }
 
-function normalizePin(value) {
-  const pin = String(value || "").trim();
-  return /^\d{4}$/.test(pin) ? pin : "";
+function normalizeUserId(value) {
+  const userId = String(value || "").trim();
+  return /^[A-Za-z0-9_-]{3,32}$/.test(userId) ? userId : "";
 }
 
 function normalizeDate(value) {
@@ -373,20 +490,42 @@ function nowString() {
   return Utilities.formatDate(new Date(), TIMEZONE, "yyyy-MM-dd HH:mm:ss");
 }
 
-function createToken(pin) {
-  const payload = JSON.stringify({ pin: normalizePin(pin), iat: Date.now() });
-  return Utilities.base64EncodeWebSafe(payload);
+function dateTimeString(date) {
+  return Utilities.formatDate(date, TIMEZONE, "yyyy-MM-dd HH:mm:ss");
 }
 
-function parseToken(token) {
-  if (!token) return "";
-  try {
-    const decoded = Utilities.newBlob(Utilities.base64DecodeWebSafe(String(token))).getDataAsString();
-    const payload = JSON.parse(decoded);
-    return normalizePin(payload.pin);
-  } catch (e) {
-    return "";
-  }
+function getSessionExpireDate() {
+  const now = new Date();
+  now.setDate(now.getDate() + SESSION_EXPIRES_DAYS);
+  return now;
+}
+
+function createSessionToken() {
+  const raw = `${Utilities.getUuid()}:${Date.now()}:${Math.random()}`;
+  return Utilities.base64EncodeWebSafe(raw).replace(/=+$/, "");
+}
+
+function generateSalt() {
+  return Utilities.getUuid().replace(/-/g, "") + String(Date.now());
+}
+
+function hashPassword(password, salt) {
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, `${salt}:${password}`);
+  return bytesToHex(bytes);
+}
+
+function verifyPassword(password, salt, expectedHash) {
+  if (!password || !salt || !expectedHash) return false;
+  return hashPassword(password, salt) === String(expectedHash);
+}
+
+function bytesToHex(bytes) {
+  return bytes
+    .map((b) => {
+      const v = b < 0 ? b + 256 : b;
+      return v.toString(16).padStart(2, "0");
+    })
+    .join("");
 }
 
 function fail(error, message) {
