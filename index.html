@@ -553,13 +553,8 @@
         </div>
 
         <div class="authPanel" id="panelRegister" role="tabpanel" aria-hidden="true">
-          <div class="grid2 mt8">
-            <div>
-              <input type="text" id="regName" autocomplete="name" placeholder="表示名（ニックネーム）" />
-            </div>
-            <div>
-              <input type="text" id="userIdReg" autocomplete="username" placeholder="ユーザー名（英数字・-_、3〜32文字）" />
-            </div>
+          <div class="mt8">
+            <input type="text" id="userIdReg" autocomplete="username" placeholder="ユーザー名（英数字・-_、3〜32文字）" />
           </div>
 
           <div class="row mt8">
@@ -701,7 +696,6 @@ const el = {
   passwordLogin: document.getElementById("passwordLogin"),
   btnLogin: document.getElementById("btnLogin"),
 
-  regName: document.getElementById("regName"),
   userIdReg: document.getElementById("userIdReg"),
   passwordReg: document.getElementById("passwordReg"),
   btnRegister: document.getElementById("btnRegister"),
@@ -1077,8 +1071,8 @@ async function apiHealth() {
 async function apiLogin(userId, password) {
   return requestJsonp({ action: "login", userId, password });
 }
-async function apiRegister(userId, password, displayName) {
-  return requestJsonp({ action: "registerUser", userId, password, displayName });
+async function apiRegister(userId, password) {
+  return requestJsonp({ action: "registerUser", userId, password });
 }
 async function apiDashboard(token) {
   return requestJsonp({ action: "getDashboard", token });
@@ -1194,17 +1188,15 @@ async function handleLogin() {
 }
 
 async function handleRegister() {
-  const name = el.regName.value.trim();
   const userId = el.userIdReg.value.trim();
   const password = el.passwordReg.value.trim();
 
-  if (!name) { showToast("名前を入力してください"); return; }
   if (!/^[A-Za-z0-9_-]{3,32}$/.test(userId)) { showToast("ユーザー名は英数字・-_、3〜32文字です"); return; }
   if (!/^\d{4}$/.test(password)) { showToast("パスワードは4桁の数字です"); return; }
 
   setLoadingState(true);
   try {
-    const res = await apiRegister(userId, password, name);
+    const res = await apiRegister(userId, password);
     if (!res?.ok) throw new Error(res?.message || res?.error || "登録失敗");
 
     showToast("登録しました。ログインします");
@@ -1215,8 +1207,7 @@ async function handleRegister() {
     const loginRes = await apiLogin(userId, password);
     if (!loginRes?.ok) throw new Error(loginRes?.message || loginRes?.error || "ログイン失敗");
 
-    setAuth(loginRes.token, loginRes.name || name);
-    el.regName.value = "";
+    setAuth(loginRes.token, loginRes.name || userId);
     el.userIdReg.value = "";
     el.passwordReg.value = "";
     setAuthTab("login");

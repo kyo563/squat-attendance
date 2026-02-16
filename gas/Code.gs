@@ -109,9 +109,7 @@ function handleLogout(store, params) {
 function handleRegister(store, params) {
   const userId = normalizeUserId(params.userId);
   const password = String(params.password || "");
-  const displayName = String(params.displayName || params.name || "").trim();
 
-  if (!displayName) return fail("missing_name", "名前を入力してください。");
   if (!userId) return fail("missing_user_id", "userId は必須です（英数字・-_、3〜32文字）。");
   if (!/^\d{4}$/.test(password)) {
     return fail("weak_password", "password は4桁の数字にしてください。");
@@ -127,7 +125,7 @@ function handleRegister(store, params) {
     const passwordSalt = generateSalt();
     const passwordHash = hashPassword(password, passwordSalt);
 
-    store.addUser({ userId, name: displayName, passwordSalt, passwordHash });
+    store.addUser({ userId, name: userId, passwordSalt, passwordHash });
     return {
       ok: true,
       message: "登録しました",
