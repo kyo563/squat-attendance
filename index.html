@@ -527,7 +527,7 @@
       <!-- 下部KPI -->
       <div class="bottomGrid">
         <div class="miniCard">
-          <div class="label">モデルユーザー（Settings: model_user_id）の今日</div>
+          <div class="label">モデルユーザー（仮設定: AAA）の今日</div>
           <div class="value" id="modelValue">--</div>
           <div class="sub" id="modelSub">--</div>
         </div>
@@ -586,6 +586,7 @@ const API_URL_STORAGE_KEY = "squat_app_api_url";
 const TOKEN_STORAGE_KEY   = "squat_app_token";
 const NAME_STORAGE_KEY    = "squat_app_name";
 const TZ_LABEL_DEFAULT    = "Asia/Kuala_Lumpur";
+const TEMP_MODEL_USER_ID  = "AAA"; // 雲丹ユーザー登録までの仮設定。登録後に更新してください。
 
 // 手動URLが有効な場合に使うAPI URL
 let gasApiUrl = DEFAULT_GAS_API_URL;
@@ -908,7 +909,7 @@ function updateKpisFromDashboard(dash) {
     el.modelSub.textContent = (md === true && mts) ? `時刻: ${mts}` : `model_user_id: ${model.userId}`;
   } else {
     el.modelValue.textContent = "--";
-    el.modelSub.textContent = "Settings の model_user_id が未設定です";
+    el.modelSub.textContent = `仮設定中: model_user_id = ${TEMP_MODEL_USER_ID}（後で更新可）`;
   }
 
   // 継続率
