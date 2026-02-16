@@ -5,32 +5,37 @@
 ## データストア
 - **Spreadsheet** を 1 つ用意し、以下 2 シートを作成します。スクリプトはシートが無い場合自動生成します。
   - `Users` シート: `pin, name, createdAt, updatedAt`
-  - `Attendance` シート: `date, pin`
+  - `Attendance` シート: `date, pin, reps, createdAt`
 - スクリプト プロパティ `SPREADSHEET_ID` にシート ID を保存するか、`Code.gs` 内の `SPREADSHEET_ID` を書き換えてください。
 - （任意）共有鍵を使う場合は `API_SHARED_KEY` を設定し、クライアントから `key` パラメーターで渡します。
 
 ## API フォーマット
-GAS Web アプリのデプロイ URL に対し `GET` で呼び出します。全て JSON を返却します。
+GAS Web アプリのデプロイ URL に対し `GET` で呼び出します。フロントエンドは JSONP のため `callback` パラメーターも付与します。
 
-| mode | 必須パラメーター | 返却内容 |
+| action | 必須パラメーター | 返却内容（主要） |
 | --- | --- | --- |
-| `login` | `pin` | `{status, name, users, attendance, dashboard}` |
-| `register` | `pin, name` | `{status, users, message}` |
-| `getAttendance` | `pin, month(YYYY-MM)` | `{status, attendance, dashboard}` |
-| `checkin` | `pin, date(YYYY-MM-DD)` | `{status, attendance, dashboard, message}` |
-| `dashboard` | なし | `{status, dashboard}` |
+| `health` | なし | `{ok, timezone, now}` |
+| `registerUser` | `pin4, displayName` | `{ok, message}` |
+| `login` | `pin4` | `{ok, token, name}` |
+| `getDashboard` | `token` | `{ok, today, monthKey, me, model, retention}` |
+| `getAttendance` | `token, month(YYYY-MM)` | `{ok, monthKey, monthDoneDates}` |
+| `checkin` | `token, reps` | `{ok, message, date}` |
 
 ### 共通レスポンス
 ```jsonc
 {
-  "status": "ok" | "error",
-  "message": "エラー内容 (error のとき)",
-  "attendance": ["YYYY-MM-DD", ...], // ユーザーの全記録
-  "users": [{"pin":"1234","name":"Alice"}, ...], // 全ユーザー一覧
-  "dashboard": {
-    "modelToday": {"status":"進行中","desc":"..."},
-    "ret": {"today":"75%","desc":"全体の継続率 ..."}
-  }
+  "ok": true,
+  "message": "補足メッセージ"
+}
+```
+
+エラー時:
+
+```jsonc
+{
+  "ok": false,
+  "error": "error_code",
+  "message": "エラー内容"
 }
 ```
 
@@ -53,4 +58,3 @@ SPREADSHEET_ID="your-sheet-id" ./scripts/create_gas_template.sh
 3. スクリプト プロパティに `SPREADSHEET_ID`（必須）と `API_SHARED_KEY`（任意）を設定。
 4. 「デプロイ」→「新しいデプロイ」→「種類: ウェブアプリ」から「全員」に公開。
 5. 得られた Web アプリ URL を `index.html` の `DEFAULT_GAS_API_URL` または手動 URL 入力欄に設定。
-
