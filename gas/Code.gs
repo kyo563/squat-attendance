@@ -180,11 +180,7 @@ function handleCheckin(store, params) {
   const me = requireUserFromToken(params.token, store);
   if (!me.ok) return me;
 
-  const repsParam = String(params.reps || "").trim();
-  const reps = repsParam ? Number(repsParam) : 30;
-  if (!isFinite(reps) || reps < 1 || reps > 999) {
-    return fail("invalid_reps", "回数（reps）が不正です。");
-  }
+  const reps = 30;
 
   const today = normalizeDate(new Date());
   const lock = LockService.getScriptLock();
