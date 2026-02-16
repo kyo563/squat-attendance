@@ -182,16 +182,53 @@
       position:relative;
       overflow:hidden;
     }
+    .dayNum{
+      position:relative;
+      z-index:1;
+      font-weight:600;
+    }
+    .day.sat{
+      background:#eef6ff;
+      border-color:#d7e8ff;
+    }
+    .day.sun{
+      background:#fff0f0;
+      border-color:#ffdede;
+    }
+    .day.holiday{
+      background:#fff9dd;
+      border-color:#ffeeb2;
+    }
+    .day.holiday::after{
+      content:"祝日";
+      position:absolute;
+      right:4px;
+      bottom:3px;
+      font-size:9px;
+      font-weight:700;
+      line-height:1;
+      color:#a17400;
+      z-index:1;
+    }
     .day.off{
       background:#f6f6f6;
       color:#bbb;
       border-style:dashed;
     }
     .day.done{
-      background:#fff1e1;
-      color:#9a4b00;
-      border-color:#ffcc99;
-      box-shadow: inset 0 0 0 1px #ffc488;
+      border-color:#40a36b;
+      box-shadow: inset 0 0 0 1px #8dd7ad;
+    }
+    .day.done::before{
+      content:"✓";
+      position:absolute;
+      top:3px;
+      left:4px;
+      font-size:11px;
+      font-weight:800;
+      color:#1f7a44;
+      line-height:1;
+      z-index:1;
     }
     .day.today{
       outline:2px solid rgba(0,0,0,.25);
@@ -224,9 +261,19 @@
       border:1px solid var(--line);
     }
     .legendSwatch.done{
-      background:#fff1e1;
-      border-color:#ffcc99;
-      box-shadow: inset 0 0 0 1px #ffc488;
+      background:#fff;
+      border-color:#40a36b;
+      box-shadow: inset 0 0 0 1px #8dd7ad;
+      position:relative;
+    }
+    .legendSwatch.done::after{
+      content:"✓";
+      position:absolute;
+      left:5px;
+      top:-2px;
+      color:#1f7a44;
+      font-size:11px;
+      font-weight:800;
     }
 
     .miniCard{
@@ -858,6 +905,19 @@ function ymd(y, m, d){
   return `${y}-${pad2(m)}-${pad2(d)}`;
 }
 
+async function loadJpHolidays() {
+  const url = "https://holidays-jp.github.io/api/v1/date.json";
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return (data && typeof data === "object") ? data : {};
+  } catch (e) {
+    console.warn("祝日データ取得に失敗しました:", e);
+    return {};
+  }
+}
+
 /* ============================
    状態
 ============================ */
@@ -869,6 +929,7 @@ const auth = {
 let currentMonthKey = ""; // "yyyy-MM"
 let todayKey = "";        // "yyyy-MM-dd"
 let monthDoneDates = [];  // string[] for current month
+let jpHolidays = {};      // { "yyyy-MM-dd": "祝日名" }
 
 function setAuthTab(tabName) {
   const isLogin = tabName === "login";
@@ -913,9 +974,19 @@ function renderCalendar(monthKey, doneDates, todayStr) {
     const dateStr = ymd(y, m, d);
     const dayEl = document.createElement("div");
     dayEl.className = "day";
+
+    const weekDay = new Date(y, m - 1, d).getDay();
+    const holidayName = jpHolidays[dateStr];
+    if (weekDay === 6) dayEl.classList.add("sat");
+    if (weekDay === 0) dayEl.classList.add("sun");
+    if (holidayName) {
+      dayEl.classList.add("holiday");
+      dayEl.title = holidayName;
+    }
+
     if (doneSet.has(dateStr)) dayEl.classList.add("done");
     if (todayStr && dateStr === todayStr) dayEl.classList.add("today");
-    dayEl.textContent = String(d);
+    dayEl.innerHTML = `<span class="dayNum">${d}</span>`;
     container.appendChild(dayEl);
   }
 
@@ -1201,6 +1272,9 @@ function resetUrlToDefault() {
 ============================ */
 async function init() {
   setAuthTab("login");
+
+  // 祝日データを先に読み込む（失敗時は空データ）
+  jpHolidays = await loadJpHolidays();
 
   // 初期モード反映
   isManualMode = (el.modeCheckbox.checked === true);
