@@ -547,7 +547,7 @@
         <div class="authPanel active" id="panelLogin" role="tabpanel">
           <div class="stackOnMobile">
             <input type="text" id="userIdLogin" autocomplete="username" placeholder="登録済みユーザー名" />
-            <input type="password" id="passwordLogin" inputmode="numeric" autocomplete="current-password" placeholder="パスワード（4桁）" />
+            <input type="password" id="passwordLogin" inputmode="numeric" pattern="[0-9]*" maxlength="4" minlength="4" autocomplete="current-password" placeholder="パスワード（4桁）" />
             <button type="button" class="btnPrimary" id="btnLogin">ログイン</button>
           </div>
         </div>
@@ -558,7 +558,7 @@
           </div>
 
           <div class="row mt8">
-            <input type="password" id="passwordReg" inputmode="numeric" autocomplete="new-password" placeholder="登録用パスワード（4桁）" />
+            <input type="password" id="passwordReg" inputmode="numeric" pattern="[0-9]*" maxlength="4" minlength="4" autocomplete="new-password" placeholder="登録用パスワード（4桁）" />
             <button type="button" class="btnPrimary" id="btnRegister">登録</button>
           </div>
         </div>
@@ -1265,6 +1265,12 @@ function handleMonthNav(delta) {
   refreshAll("月移動");
 }
 
+function bindPinInput(inputEl) {
+  inputEl.addEventListener("input", () => {
+    inputEl.value = String(inputEl.value || "").replace(/\D/g, "").slice(0, 4);
+  });
+}
+
 /* ============================
    設定（手動URL）
 ============================ */
@@ -1380,6 +1386,9 @@ async function init() {
   el.passwordReg.addEventListener("keydown", (e) => {
     if (e.key === "Enter") handleRegister();
   });
+
+  bindPinInput(el.passwordLogin);
+  bindPinInput(el.passwordReg);
 }
 
 document.addEventListener("DOMContentLoaded", init);
