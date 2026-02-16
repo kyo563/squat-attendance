@@ -113,7 +113,9 @@ function handleRegister(store, params) {
 
   if (!displayName) return fail("missing_name", "名前を入力してください。");
   if (!userId) return fail("missing_user_id", "userId は必須です（英数字・-_、3〜32文字）。");
-  if (password.length < 8) return fail("weak_password", "password は8文字以上にしてください。");
+  if (!/^\d{4}$/.test(password)) {
+    return fail("weak_password", "password は4桁の数字にしてください。");
+  }
 
   const lock = LockService.getScriptLock();
   lock.waitLock(30 * 1000);
