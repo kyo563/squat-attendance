@@ -466,8 +466,6 @@
     @keyframes spin{ to{ transform: rotate(360deg); } }
 
     .stackOnMobile{ display:flex; gap:10px; align-items:center; }
-    .repsWrap{ display:flex; gap:10px; align-items:center; }
-    .repsWrap input{ max-width:140px; }
 
     .authCard.hidden{ display:none; }
 
@@ -490,7 +488,6 @@
       .row{ gap:8px; }
       .grid2{ grid-template-columns: 1fr; }
       .stackOnMobile{ flex-direction:column; align-items:stretch; }
-      .repsWrap{ flex-direction:row; }
       #btnCheckin{ font-size:20px; padding: 18px 14px; }
       .bottomGrid{ grid-template-columns: 1fr; }
       .navLabel{ font-size:12px; }
@@ -588,7 +585,7 @@
           </div>
         </div>
 
-        <div class="row mt10 repsWrap" style="flex-wrap:wrap">
+        <div class="row mt10" style="flex-wrap:wrap">
           <button type="button" class="btnPrimary" id="btnCheckin">今日30回スクワットした</button>
         </div>
         <div class="muted mt8" id="todayMeta">--</div>
