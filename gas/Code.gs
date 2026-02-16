@@ -79,6 +79,9 @@ function handleLogin(store, params) {
 
   if (!userId) return fail("missing_user_id", "userId は必須です。");
   if (!password) return fail("missing_password", "password は必須です。");
+  if (!/^\d{4}$/.test(password)) {
+    return fail("weak_password", "password は4桁の数字にしてください。");
+  }
 
   const user = store.findUser(userId);
   if (!user) return fail("user_not_found", "ユーザーが存在しません。");
